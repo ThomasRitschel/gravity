@@ -44,6 +44,6 @@ Demo
 2. test parameters are already set und should be as shown in settings.png
 3. click "Start"
 4. aggregation modeling starts and a window visualising the progress is created (screenshot.png)
-5. hit ESC to quit and export 3D structure as stacked 2D images if required (folder .\aggregateout is created at location of execution and its content overridden)
+5. hit ESC to quit and follow instructions to export wanted datasets
 
-run-time is depending on user and output is non-deterministic due to the stochastic nature of diffusion modeling 
+run-time is depending on user settings and output is non-deterministic due to the stochastic nature of diffusion modeling 
