@@ -14,7 +14,7 @@ General Information
 
 Compiled from source.txt, linear_algebra.txt, and Screen3DRequester.txt with PureBasic 5.60
 
-gravity_aggregation_3D.exe.exe creates init.dat upon first run to store user settings
+if not already exisitng, gravity_aggregation_3D.exe.exe creates init.dat upon first run to store user settings
 
 
 Dependencies
@@ -41,9 +41,9 @@ execute gravity_aggregation_3D.exe as is, no installation required, include Engi
 Demo
 ----
 1. execute gravity_aggregation_3D.exe
-2. test parameters are already set und should be as shown in settings.png
+2. test parameters are stored in init.dat and will be automatically imported if placed in the same folder
 3. click "Start"
-4. aggregation modeling starts and a window visualising the progress is created (screenshot.png)
+4. aggregation modeling starts and a window visualising the progress is created, controls are shown on screen
 5. hit ESC to quit and follow instructions to export wanted datasets
 
 run-time is depending on user settings and output is non-deterministic due to the stochastic nature of diffusion modeling 
