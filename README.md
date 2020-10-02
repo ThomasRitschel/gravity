@@ -14,7 +14,7 @@ General Information
 
 Compiled from source.txt, linear_algebra.txt, and Screen3DRequester.txt with PureBasic 5.60
 
-if not already exisitng, gravity_aggregation_3D.exe.exe creates init.dat upon first run to store user settings
+if not already exisitng, gravity_aggregation_3D.exe creates init.dat upon first run to store user settings
 
 
 Dependencies
