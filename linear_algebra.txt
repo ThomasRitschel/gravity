@@ -1,0 +1,412 @@
+
+Procedure add_scaled_vec_fma(*p1,*p2,*p3,scalar.d,size.i)
+  
+  ;*p1=*p2+scalar*p3
+  y.i=Round((size+1)/32,#PB_Round_Down)
+  rest.i=(size+1)%32
+  *p4=@scalar
+  !mov r8,[p.p_p4]
+  !vbroadcastsd ymm8,[r8]
+  !mov rcx,[p.v_y]
+  !mov rax,[p.p_p1]
+  !mov rdx,[p.p_p2]
+  !mov rbx,[p.p_p3]
+  !test rcx,rcx
+  !jz .tooshort
+  !.s1:
+;   !prefetcht0 [rdx+256]
+;   !prefetcht0 [rbx+256]
+;   !prefetcht0 [rdx+288]
+;   !prefetcht0 [rbx+288]
+  !vmovupd ymm0,[rbx]
+  !vmovupd ymm1,[rbx+32]
+  !vmovupd ymm2,[rbx+64]
+  !vmovupd ymm3,[rbx+96]
+  !vmovupd ymm4,[rbx+128]
+  !vmovupd ymm5,[rbx+160]
+  !vmovupd ymm6,[rbx+192]
+  !vmovupd ymm7,[rbx+224]
+;   !vmovupd ymm4,[rdx]
+;   !vmovupd ymm5,[rdx+32]
+;   !vmovupd ymm6,[rdx+64]
+;   !vmovupd ymm7,
+  !vfmadd213pd ymm0,ymm8,[rdx]
+  !vfmadd213pd ymm1,ymm8,[rdx+32]
+  !vfmadd213pd ymm2,ymm8,[rdx+64]
+  !vfmadd213pd ymm3,ymm8,[rdx+96]
+  !vfmadd213pd ymm4,ymm8,[rdx+128]
+  !vfmadd213pd ymm5,ymm8,[rdx+160]
+  !vfmadd213pd ymm6,ymm8,[rdx+192]
+  !vfmadd213pd ymm7,ymm8,[rdx+224]
+;   !vmulpd ymm4,ymm4,ymm8
+;   !vmulpd ymm5,ymm5,ymm8
+;   !vmulpd ymm6,ymm6,ymm8
+;   !vmulpd ymm7,ymm7,ymm8
+;   !vaddpd ymm0,ymm0,ymm4
+;   !vaddpd ymm1,ymm1,ymm5
+;   !vaddpd ymm2,ymm2,ymm6
+;   !vaddpd ymm3,ymm3,ymm7
+  !vmovupd [rax],ymm0
+  !vmovupd [rax+32],ymm1
+  !vmovupd [rax+64],ymm2
+  !vmovupd [rax+96],ymm3
+  !vmovupd [rax+128],ymm4
+  !vmovupd [rax+160],ymm5
+  !vmovupd [rax+192],ymm6
+  !vmovupd [rax+224],ymm7
+  !add rax,256
+  !add rbx,256
+  !add rdx,256
+  ;!test rcx,rcx
+  !sub rcx,1
+  !jnz .s1  
+  !.tooshort:
+  !mov rcx,[p.v_rest]
+  !test rcx,rcx
+  !jz .out  
+  ;!fld qword [r8]
+  !.s2:
+  !vmovsd xmm0,[rbx]
+  !vfmadd213sd xmm0,xmm8,[rdx]
+  ;!fld qword [rbx]
+  ;!fmul st0,st1
+  ;!fld qword [rdx]
+  ;!faddp
+  ;!fstp qword [rax]
+  !vmovsd [rax],xmm0
+  !add rbx,8
+  !add rax,8
+  !add rdx,8
+;  !test rcx,rcx
+  !sub rcx,1
+  !jnz .s2
+ ; !fstp st0
+  !.out:
+  
+  
+EndProcedure  
+
+Procedure add_scaled_vec_fma_align(*p1,*p2,*p3,scalar.d,size.i)
+  
+  ;*p1=*p2+scalar*p3
+  y.i=Round((size+1)/16,#PB_Round_Down)
+  rest.i=(size+1)%16
+  *p4=@scalar
+  !mov r8,[p.p_p4]
+  !vmovsd xmm8,[r8]
+  !vmovhpd xmm8,xmm8,[r8]
+  !mov rcx,[p.v_y]
+  !mov rax,[p.p_p1]
+  !mov rdx,[p.p_p2]
+  !mov rbx,[p.p_p3]
+  !test rcx,rcx
+  !jz .tooshort
+  !align 16
+  !.s1:vmovapd xmm0,[rbx]
+  !vmovapd xmm1,[rbx+16]
+  !vmovapd xmm2,[rbx+32]
+  !vmovapd xmm3,[rbx+48]
+  !vmovapd xmm4,[rbx+64]
+  !vmovapd xmm5,[rbx+80]
+  !vmovapd xmm6,[rbx+96]
+  !vmovapd xmm7,[rbx+112]
+  !vfmadd213pd xmm0,xmm8,[rdx]
+  !vfmadd213pd xmm1,xmm8,[rdx+16]
+  !vfmadd213pd xmm2,xmm8,[rdx+32]
+  !vfmadd213pd xmm3,xmm8,[rdx+48]
+  !vfmadd213pd xmm4,xmm8,[rdx+64]
+  !vfmadd213pd xmm5,xmm8,[rdx+80]
+  !vfmadd213pd xmm6,xmm8,[rdx+96]
+  !vfmadd213pd xmm7,xmm8,[rdx+112]
+  !vmovntpd [rax],xmm0
+  !vmovntpd [rax+16],xmm1
+  !vmovntpd [rax+32],xmm2
+  !vmovntpd [rax+48],xmm3
+  !vmovntpd [rax+64],xmm4
+  !vmovntpd [rax+80],xmm5
+  !vmovntpd [rax+96],xmm6
+  !vmovntpd [rax+112],xmm7
+  !add rax,128
+  !add rbx,128
+  !add rdx,128
+  !sub rcx,1
+  !jnz .s1  
+  !.tooshort:
+  !mov rcx,[p.v_rest]
+  !test rcx,rcx
+  !jz .out  
+  !align 16
+  !.s2:vmovsd xmm0,[rbx]
+  !vfmadd213sd xmm0,xmm8,[rdx]
+  !vmovsd [rax],xmm0
+  !add rbx,8
+  !add rax,8
+  !add rdx,8
+  !sub rcx,1
+  !jnz .s2
+  !.out:
+  
+  
+EndProcedure 
+
+Procedure copy_array(*p1,*p2,size.i)
+  
+  ;*p1=*p2
+  y.i=Round((size+1)/32,#PB_Round_Down)
+  rest.i=(size+1)%32
+  !mov rcx,[p.v_y]
+  !mov rax,[p.p_p1]
+  !mov rdx,[p.p_p2]
+  !test rcx,rcx
+  !jz .tooshort
+  !align 16
+  !.s1:movapd xmm0,[rdx]
+  !movapd xmm1,[rdx+16]
+  !movapd xmm2,[rdx+32]
+  !movapd xmm3,[rdx+48]
+  !movapd xmm4,[rdx+64]
+  !movapd xmm5,[rdx+80]
+  !movapd xmm6,[rdx+96]
+  !movapd xmm7,[rdx+112]
+  !movapd xmm8,[rdx+128]
+  !movapd xmm9,[rdx+144]
+  !movapd xmm10,[rdx+160]
+  !movapd xmm11,[rdx+176]
+  !movapd xmm12,[rdx+192]
+  !movapd xmm13,[rdx+208]
+  !movapd xmm14,[rdx+224]
+  !movapd xmm15,[rdx+240]
+  !movntpd [rax],xmm0
+  !movntpd [rax+16],xmm1
+  !movntpd [rax+32],xmm2
+  !movntpd [rax+48],xmm3
+  !movntpd [rax+64],xmm4
+  !movntpd [rax+80],xmm5
+  !movntpd [rax+96],xmm6
+  !movntpd [rax+112],xmm7
+  !movntpd [rax+128],xmm8
+  !movntpd [rax+144],xmm9
+  !movntpd [rax+160],xmm10
+  !movntpd [rax+176],xmm11
+  !movntpd [rax+192],xmm12
+  !movntpd [rax+208],xmm13
+  !movntpd [rax+224],xmm14
+  !movntpd [rax+240],xmm15 
+  !add rax,256
+  !add rdx,256
+  !sub rcx,1
+  !jnz .s1  
+  !.tooshort:
+  !mov rcx,[p.v_rest]
+  !test rcx,rcx
+  !jz .out  
+  !align 16
+  !.s2:vmovsd xmm0,[rdx]
+  !vmovsd [rax],xmm0
+  !add rax,8
+  !add rdx,8
+  !sub rcx,1
+  !jnz .s2
+  !.out:
+  
+EndProcedure  
+
+Procedure.b matrix_multi(Array inputmatrix1.d(2),Array inputmatrix2.d(2), Array outputmatrix.d(2),transpose1.b,transpose2.b)
+  
+  Protected temp.d
+  If transpose1:transpose1=1:EndIf
+  If transpose2:transpose2=1:EndIf
+  Protected trans1_inv.i=1-transpose1
+  Protected trans2_inv.i=1-transpose2
+  
+  If (Not ArraySize(inputmatrix1(),2-transpose1)=ArraySize(inputmatrix2(),1+transpose2)) Or (Not (ArraySize(outputmatrix(),1)=ArraySize(inputmatrix1(),1+transpose1) And ArraySize(outputmatrix(),2)=ArraySize(inputmatrix2(),2-transpose2))):ProcedureReturn 0:EndIf
+  
+  Protected x.i=ArraySize(inputmatrix1(),1+transpose1)
+  Protected y.i=ArraySize(inputmatrix2(),2-transpose2)
+  Protected z.i=ArraySize(inputmatrix1(),2-transpose1)
+  
+  node_a1.i
+  node_b1.i
+  node_a2.i
+  node_b2.i
+  node_ar.i
+  node_br.i
+;   node_br2.i
+  ;node_c1.i=8
+  If transpose1:node_a1=(x+1)*8:node_a2=8:node_ar=((x+1)*(z+1))*8:Else:node_a1=8:node_a2=(z+1)*8:node_ar=(z+1)*8:EndIf
+  If transpose2
+    node_b1=8
+    node_b2=(z+1)*8
+    node_br=(z+1)*8
+    ;node_br2=((y+1)*(z+1))*8
+  Else
+    node_b1=(y+1)*8
+    node_b2=8
+    node_br=((y+1)*(z+1))*8
+    ;node_br2=(y+1)*8
+  EndIf
+  
+  *p1=@inputmatrix1()
+  *p2=@inputmatrix2()
+  *p3=@outputmatrix()
+  
+  !mov rsi,[p.p_p1]
+  !mov rax,[p.p_p2]
+  !mov rdi,[p.p_p3]
+  !mov r10,[p.v_node_a1]
+  !mov r11,[p.v_node_b1]
+  !mov r12,[p.v_node_a2]
+  !mov r13,[p.v_node_b2]
+  !mov r14,[p.v_node_ar]
+  !mov r15,[p.v_node_br]
+  
+  !mov rcx,[p.v_x]
+  !add rcx,1
+  !.s1:
+  !mov r8,rcx
+  !mov rcx,[p.v_y]
+  !add rcx,1
+  !.s2:
+  !mov r9,rcx
+  !mov rcx,[p.v_z]
+  !add rcx,1
+  !fldz
+  !.s3:  
+  !fld qword [rsi]
+  !fld qword [rax]
+  !fmulp
+  !faddp
+  !add rsi,r10;[p.v_node_a1]
+  !add rax,r11;[p.v_node_b1]
+  !sub rcx,1
+  !jnz .s3
+  !fstp qword [rdi]
+  !add rdi,8
+  !sub rsi,r14;[p.v_node_ar]
+  !sub rax,r15;[p.v_node_br]
+  !add rax,r13;[p.v_node_b2]
+  !mov rcx,r9
+  !sub rcx,1
+  !jnz .s2
+  !mov rax,[p.p_p2]; rax,[p.v_node_br2]
+  !add rsi,r12;[p.v_node_a2]
+  !mov rcx,r8
+  !sub rcx,1
+  !jnz .s1
+;   For i=0 To x
+;     For j=0 To y
+;       temp=0
+;       !mov rcx,[p.p_p3]
+;       !add rcx,1
+;       !fldz
+;       !.s3:
+;       !fld qword [rax]
+;       !fld qword [rbx]
+;       
+;       !loop .s3
+;       For k=0 To z     
+;         temp+inputmatrix1(i*trans1_inv+k*transpose1,k*trans1_inv+i*transpose1)*inputmatrix2(k*trans2_inv+j*transpose2,j*trans2_inv+k*transpose2) 
+;       Next k
+;       outputmatrix(i,j)=temp
+;     Next j  
+;   Next i  
+  
+  ProcedureReturn 1
+  
+EndProcedure 
+
+Procedure.b matrix_inv(Array inputmatrix.d(2),Array outputmatrix.d(2))
+
+  ;matrix inversion
+  Protected temp.d  
+  If Not ArraySize(inputmatrix(),1)=ArraySize(inputmatrix(),2):ProcedureReturn 0:EndIf
+  Protected x.i=ArraySize(inputmatrix(),1)
+  Protected Dim A.d(x,x)
+  Protected pivotzeile.l
+  CopyArray(inputmatrix(),A())
+  
+  For i=0 To x
+    For j=0 To x
+      outputmatrix(i,j)=0      
+    Next j
+    outputmatrix(i,i)=1
+  Next i
+  For i=0 To x-1
+    
+    temp=0
+    pivotzeile=i
+    For j=i To x
+      If Abs(A(j,i))>temp:temp=Abs(A(j,i)):pivotzeile=j:EndIf
+    Next j
+    If Not pivotzeile=i
+      ;Swap pivot(i),pivot(pivotzeile)
+      For j=0 To x
+        Swap A(i,j),A(pivotzeile,j)
+        Swap outputmatrix(i,j),outputmatrix(pivotzeile,j)
+      Next j  
+    EndIf 
+    
+    For j=i+1 To x
+      temp=A(j,i)/A(i,i)
+       add_scaled_vec_fma(@A(j,0),@A(j,0),@A(i,0),-temp,x)
+       add_scaled_vec_fma(@outputmatrix(j,0),@outputmatrix(j,0),@outputmatrix(i,0),-temp,x)
+;       For k=0 To x
+;        A(j,k)-temp*A(i,k)
+;       outputmatrix(j,k)-temp*outputmatrix(i,k)
+;       Next k  
+    Next j  
+  Next i
+  
+  For i=x To 1 Step -1
+    For j=i-1 To 0 Step -1
+      temp=A(j,i)/A(i,i)
+       add_scaled_vec_fma(@A(j,0),@A(j,0),@A(i,0),-temp,x)
+       add_scaled_vec_fma(@outputmatrix(j,0),@outputmatrix(j,0),@outputmatrix(i,0),-temp,x)
+;       For k=x To 0 Step -1       
+;          A(j,k)-temp*A(i,k)        
+;        outputmatrix(j,k)-temp*outputmatrix(i,k)
+;       Next k  
+    Next j  
+  Next i
+  
+  For i=0 To x
+    For j=0 To x
+      outputmatrix(i,j)/A(i,i)
+      If IsNAN(outputmatrix(i,j)):ProcedureReturn 0:EndIf
+    Next j  
+  Next i
+  
+  
+  ProcedureReturn 1
+  
+EndProcedure  
+
+Prototype.d function_call(arg.d) 
+
+Procedure.d newtons_method(*function,init_guess.d)
+  
+  temp.d  
+  count.i
+  deriv.function_call=*function
+  alpha.d=1.00001
+  dx.d
+  first_deriv.d
+  second_deriv.d
+  temp=init_guess
+  Repeat
+    count+1
+    init_guess=temp
+    dx=init_guess*(alpha-1)
+    first_deriv=(deriv(init_guess+dx)-deriv(init_guess))/dx
+    second_deriv=(deriv(init_guess-dx)-2*deriv(init_guess)+deriv(init_guess+dx))/(dx*dx)    
+    temp=init_guess-first_deriv/second_deriv
+  Until Log10(Abs(1-temp/init_guess))<-20 Or count>30
+  ProcedureReturn temp
+  
+  EndProcedure
+  
+; IDE Options = PureBasic 5.61 (Windows - x64)
+; CursorPosition = 383
+; Folding = A-
+; EnableXP
+; DisableDebugger
