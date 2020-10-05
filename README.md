@@ -33,10 +33,16 @@ System requirements
 -------------------
 64-Bit CPU, source code contains x64-assembly, no 32-Bit compatibility 
 
+Tested on:
+----------
+Win 
+
 
 Installation
 ------------
-execute gravity_aggregation_3D.exe as is, no installation required, include Engine3D.dll to the folder
+execute gravity_aggregation_3D.exe as is, no installation required, include Engine3D.dll to the folder.
+
+Installation time is below 5 minutes typically.
 
 Demo
 ----
