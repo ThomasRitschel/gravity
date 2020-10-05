@@ -10,7 +10,7 @@ supporting executable to manuscript "Mechanistic modeling and 3D exploration of 
 
 General Information
 -------------------
-64-Bit Win executable
+64-Bit Win executable (Win 10 preferred)
 
 Compiled from source.txt, linear_algebra.txt, and Screen3DRequester.txt with PureBasic 5.60
 
