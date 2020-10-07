@@ -14,7 +14,7 @@ General Information
 
 Compiled from source.txt, linear_algebra.txt, and Screen3DRequester.txt with PureBasic 5.60
 
-if not already exisitng, gravity_aggregation_3D.exe creates init.dat upon first run to store user settings
+if not already exisiting, gravity_aggregation_3D.exe creates init.dat upon first run to store user settings
 
 
 Dependencies
@@ -33,14 +33,15 @@ System requirements
 -------------------
 64-Bit CPU, source code contains x64-assembly, no 32-Bit compatibility 
 
+
 Tested on:
 ----------
-Win 
+Win 10 64 Bit, 32/20/16 GB RAM
 
 
 Installation
 ------------
-execute gravity_aggregation_3D.exe as is, no installation required, include Engine3D.dll to the folder.
+execute gravity_aggregation_3D.exe as is, no installation required, include Engine3D.dll to the folder and install DirectX End-User Runtime if needed.
 
 Installation time is below 5 minutes typically.
 
