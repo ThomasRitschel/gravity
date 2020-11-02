@@ -3752,7 +3752,7 @@ AttachNodeObject(node_lightwhite2, BillboardGroupID(billboard2))
 ; Static geometry
 ;
 AddStaticGeometryEntity(geometry,EntityID(ground_e),nx/2,-1,nz/2,nx,1,nz)
-FreeEntity(ground_e)
+;FreeEntity(ground_e)
 BuildStaticGeometry(geometry)
 
 ; Camera
