@@ -3,7 +3,6 @@
 
 IncludeFile "linear_algebra.txt"
 IncludeFile "Screen3DRequester.txt"  
-UsePNGImageEncoder()
 
 Structure coordinates
   x.i
@@ -82,6 +81,8 @@ Structure cluster
   gyration.d
   diff.d
   hydrodyn.d
+  freepath.d
+  lifetime.d
 EndStructure  
 
 Structure timeseriespoint
@@ -90,6 +91,7 @@ Structure timeseriespoint
   gyration.d
   hydrodyn.d
   fractal.d
+  peclet.d
   Array freeparts.d(2)
   Array attach_type.i(2)
   nr_clus.i
@@ -187,13 +189,12 @@ Enumeration
   
 EndEnumeration  
 
-Global sprite.i
 Global im_aggregate.i
 Global im_DLVO.i
-Global scale_x.d=0.8
-Global scale_y.d=0.8
-Global scale_z.d=0.2
-Global render
+Global scale_x.d=0.6
+Global scale_y.d=0.6
+Global scale_z.d=0.15
+
 ;dimensions of rod assuming rectangular shape
 Global rod_diameter.i
 Global rod_length.i
@@ -219,9 +220,7 @@ Global n_monomono.i
 Global n_monopoly.i
 Global n_polypoly.i
 Global Dim attach_minerals.i(3,3) 
-
-Global deskwidth.i
-Global deskheight.i
+  
 Global allow_attach.b
 Global allow_detach.b
 Global sediment.b
@@ -242,6 +241,8 @@ Global mode_dla.i
 Global mode.i
 Global mode_fraction.i
 Global total_mass.i
+Global deskwidth.i
+Global deskheight.i
 ; Global periodic_x.i
 ; Global periodic_y.i
 ; Global periodic_z.i
@@ -261,6 +262,15 @@ Global plate_hamaker.d=2.29E-20
 Global sphere_zetapot.d=-0.003  ;volts
 Global sphere_hamaker.d=2.29E-20
 Global water_hamaker.d=3.7E-20
+Global sigma.d=5E-10  ;collision radius, 0.5nm
+
+Global camx.d
+Global camy.d
+Global camz.d
+Global dircamx.d
+Global dircamy.d
+Global dircamz.d
+Global camfov.d
 
 Global Dim hamakers.d(3,3)
 Global Dim chances.d(3,3)
@@ -268,7 +278,19 @@ Global Dim chances_detach.d(3,3)
 Global Dim energies.d(3,3)
 Global Dim energies_detach.d(3,3)
 
-Global ionic_strength.d=1 ;mmol
+; For i=0 To 3:For j=0 To 3
+;     energies(i,j)=0
+; ; Next j:Next i    
+; 
+; Global zetapot.d  ;volts
+; Global plate_area.d
+; Global length
+; Global hamaker.d
+; Global radius1.d
+; Global radius2.d
+; Global zetapot1.d
+; Global zetapot2.d
+
 Global sphere_m.i
 Global cylinder_m.i
 Global cube_m.i
@@ -277,10 +299,18 @@ Global material_plate.i
 Global material_rod.i
 Global geometry.i
 Global camera.i
+Global render.i
+Global sprite.i
+
+
+Global ionic_strength.d=1 ;mmol
+
 ;definition of aggregate types follows
 
 Global sphere.particle
+; Global sphere_reduced.particle
 sphere\id=1
+; sphere_reduced\id=1
 Global rod.particle
 rod\id=2
 Global plate.particle
@@ -317,262 +347,152 @@ Global termination_crit.d
 Global show_dlvo.b
 Global counter.i
 Global nr_clusters_init.i
-Global stats.i
 
 Global Dim profiles.i(3,0)
 
 Procedure export_data(name.s)
   
   If MessageRequester("Info","Export entire field?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
-    dir=ExamineDirectory(#PB_Any,GetCurrentDirectory()+"aggregateout","*.*")
-    If Not IsDirectory(dir)
-      CreateDirectory(GetCurrentDirectory()+"aggregateout")
-    EndIf  
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+name+"_"+Str(nz+1)+"_"+Str(ny+1)+"_"+Str(nx+1)+".raw")
-    ;*raw=AllocateMemory((nx+1)*(ny+1)*(nz+1))
-    
-    For i=0 To nx:For j=0 To ny:For k=0 To nz
-          WriteByte(0,field(i,j,k))
-    Next k:Next j: Next i     
-    CloseFile(0)
-  EndIf
+  dir=ExamineDirectory(#PB_Any,GetCurrentDirectory()+"aggregateout","*.*")
+  If Not IsDirectory(dir)
+    CreateDirectory(GetCurrentDirectory()+"aggregateout")
+  EndIf  
+CreateFile(0,GetCurrentDirectory()+"aggregateout\"+name+"_"+Str(nz+1)+"_"+Str(ny+1)+"_"+Str(nx+1)+".raw")
+;*raw=AllocateMemory((nx+1)*(ny+1)*(nz+1))
+
+For i=0 To nx:For j=0 To ny:For k=0 To nz
+      WriteByte(0,field(i,j,k))
+Next k:Next j: Next i     
+CloseFile(0)
+EndIf
+
+If MessageRequester("Info","Export largest cluster?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
+  dir=ExamineDirectory(#PB_Any,GetCurrentDirectory()+"aggregateout","*.*")
+  If Not IsDirectory(dir)
+    CreateDirectory(GetCurrentDirectory()+"aggregateout")
+  EndIf  
   
-  If MessageRequester("Info","Export largest cluster?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
-    dir=ExamineDirectory(#PB_Any,GetCurrentDirectory()+"aggregateout","*.*")
-    If Not IsDirectory(dir)
-      CreateDirectory(GetCurrentDirectory()+"aggregateout")
-    EndIf  
-    
-    
-    i_width.i=clusters(nr_largest_cluster)\maxx-clusters(nr_largest_cluster)\minx+1
-    i_height.i=clusters(nr_largest_cluster)\maxy-clusters(nr_largest_cluster)\miny+1
-    i_depth.i=clusters(nr_largest_cluster)\maxz-clusters(nr_largest_cluster)\minz+1
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+name+"_cluster_"+Str(i_depth)+"_"+Str(i_height)+"_"+Str(i_width)+".raw")
-    
-    For i=clusters(nr_largest_cluster)\minx To clusters(nr_largest_cluster)\maxx:For j=clusters(nr_largest_cluster)\miny To clusters(nr_largest_cluster)\maxy:For k=clusters(nr_largest_cluster)\minz To clusters(nr_largest_cluster)\maxz
-          If field_info(i,j,k)\cluster-1=nr_largest_cluster:WriteByte(0,field(i,j,k)):Else:WriteByte(0,0):EndIf
-    Next k:Next j: Next i     
-    CloseFile(0)  
-    
-  EndIf
-  If MessageRequester("Info","Export largest histogramm of distances?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
-    
-    a=1
-    b=1
-    
-    dist.d
-    rd.i
-    tmp.i=nr_largest_cluster
-    maxlen.i=Round(Sqr(nx*nx+ny*ny+nz*nz),#PB_Round_Up)
-    Dim his.i(maxlen)
-    For i=0 To ArraySize(clusters(tmp)\particles())
-      For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
-        If clusters(tmp)\particles(i)\id=a
-          For k=0 To ArraySize(clusters(tmp)\particles())
-            For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
-              
-              If clusters(tmp)\particles(k)\id=b
-                dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
-                rd=Round(dist,#PB_Round_Nearest)
-                his(rd)+1
-              EndIf  
-              
-            Next l
-          Next k
+  
+  i_width.i=clusters(nr_largest_cluster)\maxx-clusters(nr_largest_cluster)\minx+1
+  i_height.i=clusters(nr_largest_cluster)\maxy-clusters(nr_largest_cluster)\miny+1
+  i_depth.i=clusters(nr_largest_cluster)\maxz-clusters(nr_largest_cluster)\minz+1
+  
+  CreateFile(0,GetCurrentDirectory()+"aggregateout\"+name+"_cluster_"+Str(i_depth)+"_"+Str(i_height)+"_"+Str(i_width)+".raw")
+  
+For i=clusters(nr_largest_cluster)\minx To clusters(nr_largest_cluster)\maxx:For j=clusters(nr_largest_cluster)\miny To clusters(nr_largest_cluster)\maxy:For k=clusters(nr_largest_cluster)\minz To clusters(nr_largest_cluster)\maxz
+   If field_info(i,j,k)\cluster-1=nr_largest_cluster:WriteByte(0,field(i,j,k)):Else:WriteByte(0,0):EndIf
+Next k:Next j: Next i     
+CloseFile(0)  
+  
+EndIf
+If MessageRequester("Info","Export largest histogramm of distances?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
+a=1
+b=2
+
+dist.d
+rd.i
+tmp.i=nr_largest_cluster
+maxlen.i=Round(Sqr(nx*nx+ny*ny+nz*nz),#PB_Round_Up)
+Dim his.i(maxlen)
+For i=0 To ArraySize(clusters(tmp)\particles())
+  For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
+    If clusters(tmp)\particles(i)\id=a
+    For k=0 To ArraySize(clusters(tmp)\particles())
+      For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
+        
+        If clusters(tmp)\particles(k)\id=b
+          dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
+          rd=Round(dist,#PB_Round_Nearest)
+          his(rd)+1
+        EndIf  
+          
+      Next l
+      Next k
         EndIf
       Next j  
-    Next i  
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_sphere_sphere.txt")
-    
-    For i=0 To nx
-      
-      WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
-      
-    Next i  
-    
-    CloseFile(0)  
-    
-    a=2
-    b=2
-    
-    dist.d
-    rd.i
-    tmp.i=nr_largest_cluster
-    maxlen.i=Round(Sqr(nx*nx+ny*ny+nz*nz),#PB_Round_Up)
-    Dim his.i(maxlen)
-    For i=0 To ArraySize(clusters(tmp)\particles())
-      For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
-        If clusters(tmp)\particles(i)\id=a
-          For k=0 To ArraySize(clusters(tmp)\particles())
-            For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
-              
-              If clusters(tmp)\particles(k)\id=b
-                dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
-                rd=Round(dist,#PB_Round_Nearest)
-                his(rd)+1
-              EndIf  
-              
-            Next l
-          Next k
+Next i  
+
+CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_sphere_rod.txt")
+
+For i=0 To nx
+  
+  WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
+  
+Next i  
+
+CloseFile(0)
+
+a=1
+b=3
+
+dist.d
+rd.i
+tmp.i=nr_largest_cluster
+Dim his.i(maxlen)
+For i=0 To ArraySize(clusters(tmp)\particles())
+  For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
+    If clusters(tmp)\particles(i)\id=a
+    For k=0 To ArraySize(clusters(tmp)\particles())
+      For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
+        
+        If clusters(tmp)\particles(k)\id=b
+          dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
+          rd=Round(dist,#PB_Round_Nearest)
+          his(rd)+1
+        EndIf  
+          
+      Next l
+      Next k
         EndIf
       Next j  
-    Next i  
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_rod_rod.txt")
-    
-    For i=0 To nx
-      
-      WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
-      
-    Next i  
-    
-    CloseFile(0)
-    
-    a=3
-    b=3
-    
-    dist.d
-    rd.i
-    tmp.i=nr_largest_cluster
-    maxlen.i=Round(Sqr(nx*nx+ny*ny+nz*nz),#PB_Round_Up)
-    Dim his.i(maxlen)
-    For i=0 To ArraySize(clusters(tmp)\particles())
-      For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
-        If clusters(tmp)\particles(i)\id=a
-          For k=0 To ArraySize(clusters(tmp)\particles())
-            For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
-              
-              If clusters(tmp)\particles(k)\id=b
-                dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
-                rd=Round(dist,#PB_Round_Nearest)
-                his(rd)+1
-              EndIf  
-              
-            Next l
-          Next k
+Next i  
+
+CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_sphere_plate.txt")
+
+For i=0 To nx
+  
+  WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
+  
+Next i  
+
+CloseFile(0)
+
+
+a=2
+b=3
+
+dist.d
+rd.i
+tmp.i=nr_largest_cluster
+Dim his.i(maxlen)
+For i=0 To ArraySize(clusters(tmp)\particles())
+  For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
+    If clusters(tmp)\particles(i)\id=a
+    For k=0 To ArraySize(clusters(tmp)\particles())
+      For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
+        
+        If clusters(tmp)\particles(k)\id=b
+          dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
+          rd=Round(dist,#PB_Round_Nearest)
+          his(rd)+1
+        EndIf  
+          
+      Next l
+      Next k
         EndIf
       Next j  
-    Next i  
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_plate_plate.txt")
-    
-    For i=0 To nx
-      
-      WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
-      
-    Next i  
-    
-    CloseFile(0)
-    
-    a=1
-    b=2
-    
-    dist.d
-    rd.i
-    tmp.i=nr_largest_cluster
-    maxlen.i=Round(Sqr(nx*nx+ny*ny+nz*nz),#PB_Round_Up)
-    Dim his.i(maxlen)
-    For i=0 To ArraySize(clusters(tmp)\particles())
-      For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
-        If clusters(tmp)\particles(i)\id=a
-          For k=0 To ArraySize(clusters(tmp)\particles())
-            For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
-              
-              If clusters(tmp)\particles(k)\id=b
-                dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
-                rd=Round(dist,#PB_Round_Nearest)
-                his(rd)+1
-              EndIf  
-              
-            Next l
-          Next k
-        EndIf
-      Next j  
-    Next i  
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_sphere_rod.txt")
-    
-    For i=0 To nx
-      
-      WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
-      
-    Next i  
-    
-    CloseFile(0)
-    
-    a=1
-    b=3
-    
-    dist.d
-    rd.i
-    tmp.i=nr_largest_cluster
-    Dim his.i(maxlen)
-    For i=0 To ArraySize(clusters(tmp)\particles())
-      For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
-        If clusters(tmp)\particles(i)\id=a
-          For k=0 To ArraySize(clusters(tmp)\particles())
-            For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
-              
-              If clusters(tmp)\particles(k)\id=b
-                dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
-                rd=Round(dist,#PB_Round_Nearest)
-                his(rd)+1
-              EndIf  
-              
-            Next l
-          Next k
-        EndIf
-      Next j  
-    Next i  
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_sphere_plate.txt")
-    
-    For i=0 To nx
-      
-      WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
-      
-    Next i  
-    
-    CloseFile(0)
-    
-    
-    a=2
-    b=3
-    
-    dist.d
-    rd.i
-    tmp.i=nr_largest_cluster
-    Dim his.i(maxlen)
-    For i=0 To ArraySize(clusters(tmp)\particles())
-      For j=0 To ArraySize(clusters(tmp)\particles(i)\points())
-        If clusters(tmp)\particles(i)\id=a
-          For k=0 To ArraySize(clusters(tmp)\particles())
-            For l=0 To ArraySize(clusters(tmp)\particles(k)\points())
-              
-              If clusters(tmp)\particles(k)\id=b
-                dist=Sqr(Pow(clusters(tmp)\particles(i)\points(j)\x-clusters(tmp)\particles(k)\points(l)\x,2)+Pow(clusters(tmp)\particles(i)\points(j)\y-clusters(tmp)\particles(k)\points(l)\y,2)+Pow(clusters(tmp)\particles(i)\points(j)\z-clusters(tmp)\particles(k)\points(l)\z,2))
-                rd=Round(dist,#PB_Round_Nearest)
-                his(rd)+1
-              EndIf  
-              
-            Next l
-          Next k
-        EndIf
-      Next j  
-    Next i  
-    
-    CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_rod_plate.txt")
-    
-    For i=0 To nx
-      
-      WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
-      
-    Next i  
-    
-    CloseFile(0)
-  EndIf
+Next i  
+
+CreateFile(0,GetCurrentDirectory()+"aggregateout\"+"distances_rod_plate.txt")
+
+For i=0 To nx
+  
+  WriteStringN(0,Str(i)+Chr(9)+Str(his(i)))
+  
+Next i  
+
+CloseFile(0)
+EndIf
 EndProcedure  
 
 Procedure get_histograms()
@@ -583,42 +503,43 @@ Procedure get_histograms()
   timeseries(n_timeseries)\time=time
   timeseries(n_timeseries)\nr_clus=nr_clusters+1
   If n_timeseries>0
-    timeseries(n_timeseries)\attach_type(0)=timeseries(n_timeseries-1)\attach_type(0)+n_monomono:n_monomono=0
-    timeseries(n_timeseries)\attach_type(1)=timeseries(n_timeseries-1)\attach_type(1)+n_monopoly:n_monopoly=0
-    timeseries(n_timeseries)\attach_type(2)=timeseries(n_timeseries-1)\attach_type(2)+n_polypoly:n_polypoly=0
-  Else
+  timeseries(n_timeseries)\attach_type(0)=timeseries(n_timeseries-1)\attach_type(0)+n_monomono:n_monomono=0
+  timeseries(n_timeseries)\attach_type(1)=timeseries(n_timeseries-1)\attach_type(1)+n_monopoly:n_monopoly=0
+  timeseries(n_timeseries)\attach_type(2)=timeseries(n_timeseries-1)\attach_type(2)+n_polypoly:n_polypoly=0
+Else
     timeseries(0)\attach_type(0)=0
-    timeseries(0)\attach_type(1)=0
-    timeseries(0)\attach_type(2)=0
-    
-  EndIf
+  timeseries(0)\attach_type(1)=0
+  timeseries(0)\attach_type(2)=0
+  
+EndIf
   timeseries(n_timeseries)\attach_minerals(0)=attach_minerals(1,1)
   timeseries(n_timeseries)\attach_minerals(1)=attach_minerals(1,2)+attach_minerals(2,1) 
   timeseries(n_timeseries)\attach_minerals(2)=attach_minerals(1,3)+attach_minerals(3,1)
   timeseries(n_timeseries)\attach_minerals(3)=attach_minerals(2,2)
   timeseries(n_timeseries)\attach_minerals(4)=attach_minerals(2,3)+attach_minerals(3,2)
   timeseries(n_timeseries)\attach_minerals(5)=attach_minerals(3,3)
-  
+
   Dim temp.d(0)
   Dim masses.hist(0)
   count=-1
   mean.d
   For i=0 To nr_clusters
     If clusters(i)\nr_particles=1
-      timeseries(n_timeseries)\freeparts(clusters(i)\particles(0)\id-1)+1  
+      timeseries(n_timeseries)\freeparts(clusters(i)\particles(0)\id-1)+1
+      clusters(i)\lifetime+timestep     
     EndIf
-    count+1
-    ReDim temp.d(count)
-    temp(count)=clusters(i)\mass
-    mean+clusters(i)\mass
-    ; EndIf
-  Next
-  timeseries(n_timeseries)\freeparts(0)/sphere_nr
-  timeseries(n_timeseries)\freeparts(1)/rod_nr
-  timeseries(n_timeseries)\freeparts(2)/plate_nr
-  timeseries(n_timeseries)\mass=mean/(count+1)
-  If timeseries(n_timeseries)\mass>timeseries_maxmass:timeseries_maxmass=timeseries(n_timeseries)\mass:EndIf
-  mean=0
+      count+1
+      ReDim temp.d(count)
+      temp(count)=clusters(i)\mass
+      mean+clusters(i)\mass
+   ; EndIf
+    Next
+    timeseries(n_timeseries)\freeparts(0)/sphere_nr
+    timeseries(n_timeseries)\freeparts(1)/rod_nr
+    timeseries(n_timeseries)\freeparts(2)/plate_nr
+    timeseries(n_timeseries)\mass=mean/(count+1)
+    If timeseries(n_timeseries)\mass>timeseries_maxmass:timeseries_maxmass=timeseries(n_timeseries)\mass:EndIf
+    mean=0
   SortArray(temp(),#PB_Sort_Ascending)
   count=-1
   For i=0 To ArraySize(temp())
@@ -677,16 +598,16 @@ Procedure get_histograms()
   Dim gyration.hist(0)
   count=-1
   For i=0 To nr_clusters
-    ; If Not clusters(i)\nr_particles=1
-    count+1
-    ReDim temp.d(count)
-    temp(count)=clusters(i)\gyration
-    mean+clusters(i)\gyration
+   ; If Not clusters(i)\nr_particles=1
+      count+1
+      ReDim temp.d(count)
+      temp(count)=clusters(i)\gyration
+      mean+clusters(i)\gyration
     ;EndIf
-  Next   
-  timeseries(n_timeseries)\gyration=mean/(count+1)
-  If timeseries(n_timeseries)\gyration>timeseries_maxgyration:timeseries_maxgyration=timeseries(n_timeseries)\gyration:EndIf
-  mean=0
+    Next   
+    timeseries(n_timeseries)\gyration=mean/(count+1)
+    If timeseries(n_timeseries)\gyration>timeseries_maxgyration:timeseries_maxgyration=timeseries(n_timeseries)\gyration:EndIf
+    mean=0
   SortArray(temp(),#PB_Sort_Ascending)
   count=-1
   For i=0 To ArraySize(temp())
@@ -712,22 +633,29 @@ Procedure get_histograms()
   For i=0 To nr_clusters
     mean+clusters(i)\hydrodyn
   Next i  
-  timeseries(n_timeseries)\hydrodyn=mean/nr_clusters
+  timeseries(n_timeseries)\hydrodyn=mean/(nr_clusters+1)
+  
+  mean=0
+  For i=0 To nr_clusters    
+    mean+1650000*9.81*dx*dx*dx*clusters(i)\mass/(6*#PI)/clusters(i)\diff
+  Next i 
+  timeseries(n_timeseries)\peclet=mean/(nr_clusters+1)
   
   ;fractal dims
+  mean=0
   Dim temp.d(0)
   Dim fractal_dims.hist(0)
   count=-1
   For i=0 To nr_clusters
     ;If Not clusters(i)\nr_particles=1
-    count+1
-    ReDim temp.d(count)
-    temp(count)=clusters(i)\fractal_dim 
-    mean+clusters(i)\fractal_dim
-    ; EndIf
-  Next   
-  timeseries(n_timeseries)\fractal=mean/(count+1)
-  If timeseries(n_timeseries)\fractal>timeseries_maxfractal:timeseries_maxfractal=timeseries(n_timeseries)\fractal:EndIf
+      count+1
+      ReDim temp.d(count)
+      temp(count)=clusters(i)\fractal_dim 
+      mean+clusters(i)\fractal_dim
+   ; EndIf
+    Next   
+    timeseries(n_timeseries)\fractal=mean/(count+1)
+    If timeseries(n_timeseries)\fractal>timeseries_maxfractal:timeseries_maxfractal=timeseries(n_timeseries)\fractal:EndIf
   SortArray(temp(),#PB_Sort_Ascending)
   count=-1
   For i=0 To ArraySize(temp())
@@ -745,8 +673,8 @@ Procedure get_histograms()
   Next i 
   For j=0 To nr_clusters
     For i=0 To ArraySize(fractal_dims())
-      ; If Not clusters(j)\nr_particles=1
-      If clusters(j)\fractal_dim=fractal_dims(i)\class:fractal_dims(i)\amount+clusters(j)\mass:EndIf
+     ; If Not clusters(j)\nr_particles=1
+        If clusters(j)\fractal_dim=fractal_dims(i)\class:fractal_dims(i)\amount+clusters(j)\mass:EndIf
       ;EndIf  
     Next i  
   Next  
@@ -768,51 +696,51 @@ Procedure get_histograms()
   var2.d
   var3.d
   
-  For j=0 To ny   
-    meanzsphere+j*profiles(1,j)
-    meanzrod+j*profiles(2,j)
-    meanzplate+j*profiles(3,j)
-  Next j
+ For j=0 To ny   
+   meanzsphere+j*profiles(1,j)
+   meanzrod+j*profiles(2,j)
+   meanzplate+j*profiles(3,j)
+ Next j
   
   meanzsphere/(sphere\nr_points*sphere_nr)
-  meanzrod/(rod\nr_points*rod_nr)
-  meanzplate/(plate\nr_points*plate_nr)
-  
-  meansphere/(ny+1)
-  meanrod/(ny+1)
-  meanplate/(ny+1)
-  
-  For j=0 To ny  
-    var1+(profiles(1,j)-meanzsphere)*(profiles(1,j)-meanzsphere)
-    var2+(profiles(2,j)-meanzrod)*(profiles(2,j)-meanzrod)
-    var3+(profiles(3,j)-meanzplate)*(profiles(3,j)-meanzplate)
-    corr12+(profiles(1,j)-meansphere)*(profiles(2,j)-meanrod)
-    corr13+(profiles(1,j)-meansphere)*(profiles(3,j)-meanplate)
-    corr23+(profiles(2,j)-meanrod)*(profiles(3,j)-meanplate)
-    zvarsphere+profiles(1,j)*(j-meanzsphere)*(j-meanzsphere)
-    zvarrod+profiles(2,j)*(j-meanzrod)*(j-meanzrod)
-    zvarplate+profiles(3,j)*(j-meanzplate)*(j-meanzplate)
-  Next j
-  corr12/ny
-  corr13/ny
-  corr23/ny
-  var1/ny
-  var2/ny
-  var3/ny
-  
-  timeseries(n_timeseries)\sdz_spheres=Sqr(zvarsphere/(sphere\nr_points*sphere_nr))
-  timeseries(n_timeseries)\sdz_rods=Sqr(zvarrod/(rod\nr_points*rod_nr))
-  timeseries(n_timeseries)\sdz_plates=Sqr(zvarplate/(plate\nr_points*plate_nr))
-  
-  timeseries(n_timeseries)\corr_sphererod=corr12/Sqr(var1*var2)
-  timeseries(n_timeseries)\corr_sphereplate=corr13/Sqr(var1*var3)
-  timeseries(n_timeseries)\corr_rodplate=corr23/Sqr(var2*var3)
-  
-  timeseries(n_timeseries)\meanz_spheres=meanzsphere
-  timeseries(n_timeseries)\meanz_rods=meanzrod
-  timeseries(n_timeseries)\meanz_plates=meanzplate
-  
-EndProcedure
+   meanzrod/(rod\nr_points*rod_nr)
+   meanzplate/(plate\nr_points*plate_nr)
+ 
+   meansphere/(ny+1)
+   meanrod/(ny+1)
+   meanplate/(ny+1)
+   
+   For j=0 To ny  
+     var1+(profiles(1,j)-meanzsphere)*(profiles(1,j)-meanzsphere)
+     var2+(profiles(2,j)-meanzrod)*(profiles(2,j)-meanzrod)
+     var3+(profiles(3,j)-meanzplate)*(profiles(3,j)-meanzplate)
+   corr12+(profiles(1,j)-meansphere)*(profiles(2,j)-meanrod)
+   corr13+(profiles(1,j)-meansphere)*(profiles(3,j)-meanplate)
+   corr23+(profiles(2,j)-meanrod)*(profiles(3,j)-meanplate)
+   zvarsphere+profiles(1,j)*(j-meanzsphere)*(j-meanzsphere)
+   zvarrod+profiles(2,j)*(j-meanzrod)*(j-meanzrod)
+   zvarplate+profiles(3,j)*(j-meanzplate)*(j-meanzplate)
+ Next j
+ corr12/ny
+ corr13/ny
+ corr23/ny
+ var1/ny
+ var2/ny
+ var3/ny
+ 
+ timeseries(n_timeseries)\sdz_spheres=Sqr(zvarsphere/(sphere\nr_points*sphere_nr))
+ timeseries(n_timeseries)\sdz_rods=Sqr(zvarrod/(rod\nr_points*rod_nr))
+ timeseries(n_timeseries)\sdz_plates=Sqr(zvarplate/(plate\nr_points*plate_nr))
+ 
+ timeseries(n_timeseries)\corr_sphererod=corr12/Sqr(var1*var2)
+ timeseries(n_timeseries)\corr_sphereplate=corr13/Sqr(var1*var3)
+ timeseries(n_timeseries)\corr_rodplate=corr23/Sqr(var2*var3)
+ 
+ timeseries(n_timeseries)\meanz_spheres=meanzsphere
+ timeseries(n_timeseries)\meanz_rods=meanzrod
+ timeseries(n_timeseries)\meanz_plates=meanzplate
+ 
+ EndProcedure
 
 Procedure.d random_cont(max.d,significant_digits.i) ;creates a randomnumber from 0 to max
   
@@ -903,7 +831,8 @@ Procedure quat_mul(*a.quat, *b.quat, *result.quat)
 EndProcedure  
 
 Procedure rotate_cluster(*target.cluster,rot_mode.i)
-    
+  
+  
   ;mode=0  do not rotate
   ;mode=1  rotate by 90 degrees around x
   ;mode=2  rotate by -90 degrees around x
@@ -939,7 +868,7 @@ Procedure rotate_cluster(*target.cluster,rot_mode.i)
   cz=Round(cz/count,#PB_Round_Down)
   rot.quat
   If Random_cont(1,6)<test/count:cz+1:EndIf
-  
+
   Dim rot_matrix.d(2,2)
   Dim temp_matrix.d(2,2)
   Select rot_mode
@@ -948,8 +877,7 @@ Procedure rotate_cluster(*target.cluster,rot_mode.i)
       rot_matrix(1,1)=1
       rot_matrix(2,2)=1
       rot\w=1
-    Case 1   
-      ;rotation matrices are inverse to backtrack the rotations
+    Case 1    
       rot_matrix(0,0)=1
       rot_matrix(1,2)=-1
       rot_matrix(2,1)=1
@@ -1152,7 +1080,7 @@ Procedure rotate_cluster(*target.cluster,rot_mode.i)
       Next   
     Next 
     
-  Else
+   Else
     For i=0 To ArraySize(*target\particles())
       
       MoveEntity(*target\particles(i)\entity_handle,(*target\particles(i)\maxx+*target\particles(i)\minx)/2,(*target\particles(i)\maxy+*target\particles(i)\miny)/2,(*target\particles(i)\maxz+*target\particles(i)\minz)/2,#PB_Absolute)
@@ -1230,7 +1158,7 @@ Procedure rotate_cluster(*target.cluster,rot_mode.i)
     Next i
     
     
-  EndIf 
+  EndIf  
   
 EndProcedure  
 
@@ -1244,6 +1172,9 @@ Procedure move_cluster(*target.cluster)
   rx=Random(2)-1   
   ry=Random(2)-1
   rz=Random(2)-1
+  If *target\nr_particles=1:*target\freepath+dx:EndIf ;Sqr(rx*rx+ry*ry+rz*rz)*
+  ;   temp.cluster
+  ;   CopyStructure(*target,@temp,cluster)
   For i=0 To ArraySize(*target\particles())
     For j=0 To ArraySize(*target\particles(i)\points())
       *target\particles(i)\points(j)\x+rx
@@ -1252,19 +1183,19 @@ Procedure move_cluster(*target.cluster)
     Next   
   Next   
   
-  ;   If periodic_x
-  ;     For i=0 To ArraySize(*target\particles())
-  ;     For j=0 To ArraySize(*target\particles(i)\points())
-  ;       If *target\particles(i)\points(j)\x<0
-  ;         *target\particles(i)\points(j)\x+nx
-  ;        EndIf
-  ;        If  *target\particles(i)\points(j)\x>nx
-  ;         *target\particles(i)\points(j)\x-nx
-  ;        EndIf
-  ;     Next   
-  ;   Next 
-  ;   EndIf
-  
+;   If periodic_x
+;     For i=0 To ArraySize(*target\particles())
+;     For j=0 To ArraySize(*target\particles(i)\points())
+;       If *target\particles(i)\points(j)\x<0
+;         *target\particles(i)\points(j)\x+nx
+;        EndIf
+;        If  *target\particles(i)\points(j)\x>nx
+;         *target\particles(i)\points(j)\x-nx
+;        EndIf
+;     Next   
+;   Next 
+;   EndIf
+    
   ;   ForEach *target\particles()
   ;     ForEach *target\particles()\points()
   ;       If *target\particles()\points()\x>nx:reset=1:EndIf
@@ -1297,7 +1228,7 @@ Procedure move_cluster(*target.cluster)
   
   If check_collision(*target)
     
-    ;If *target\nr_particles=1:*target\freepath-dx:EndIf ;Sqr(rx*rx+ry*ry+rz*rz)*
+     If *target\nr_particles=1:*target\freepath-dx:EndIf ;Sqr(rx*rx+ry*ry+rz*rz)*
     For i=0 To ArraySize(*target\particles())
       For j=0 To ArraySize(*target\particles(i)\points())
         *target\particles(i)\points(j)\x-rx
@@ -1336,18 +1267,18 @@ Procedure move_cluster(*target.cluster)
       *target\particles(i)\minz-rz
     Next 
     
-    ;     If periodic_x
-    ;           For i=0 To ArraySize(*target\particles())
-    ;     For j=0 To ArraySize(*target\particles(i)\points())
-    ;       If *target\particles(i)\points(j)\x<0
-    ;         *target\particles(i)\points(j)\x+nx
-    ;        EndIf
-    ;        If  *target\particles(i)\points(j)\x>nx
-    ;         *target\particles(i)\points(j)\x-nx
-    ;        EndIf
-    ;     Next   
-    ;   Next 
-    ;     EndIf  
+;     If periodic_x
+;           For i=0 To ArraySize(*target\particles())
+;     For j=0 To ArraySize(*target\particles(i)\points())
+;       If *target\particles(i)\points(j)\x<0
+;         *target\particles(i)\points(j)\x+nx
+;        EndIf
+;        If  *target\particles(i)\points(j)\x>nx
+;         *target\particles(i)\points(j)\x-nx
+;        EndIf
+;     Next   
+;   Next 
+;     EndIf  
     
   Else   
     
@@ -1356,6 +1287,7 @@ Procedure move_cluster(*target.cluster)
       MoveEntity(*target\particles(i)\entity_handle,rx,ry,rz)
       
     Next i
+    
     
   EndIf  
   
@@ -1371,6 +1303,21 @@ Procedure sediment_cluster(*target.cluster)
       *target\particles(i)\points(j)\y-1
     Next   
   Next   
+  
+  ;   ForEach *target\particles()
+  ;     ForEach *target\particles()\points()
+  ;       If *target\particles()\points()\x>nx:reset=1:EndIf
+  ;       If *target\particles()\points()\y>ny:reset=1:EndIf
+  ;       If *target\particles()\points()\z>nz:reset=1:EndIf
+  ;       If *target\particles()\points()\x<0:reset=1:EndIf
+  ;       If *target\particles()\points()\y<0:reset=1:EndIf
+  ;       If *target\particles()\points()\z<0:reset=1:EndIf      
+  ;     Next   
+  ;   Next 
+  ;   
+  ;   If reset=1
+  ;     CopyStructure(@temp,*target,cluster)
+  ;   Else  
   
   *target\maxy-1
   *target\miny-1
@@ -1390,7 +1337,22 @@ Procedure sediment_cluster(*target.cluster)
         *target\particles(i)\points(j)\y+1
       Next   
     Next   
-
+    
+    ;   ForEach *target\particles()
+    ;     ForEach *target\particles()\points()
+    ;       If *target\particles()\points()\x>nx:reset=1:EndIf
+    ;       If *target\particles()\points()\y>ny:reset=1:EndIf
+    ;       If *target\particles()\points()\z>nz:reset=1:EndIf
+    ;       If *target\particles()\points()\x<0:reset=1:EndIf
+    ;       If *target\particles()\points()\y<0:reset=1:EndIf
+    ;       If *target\particles()\points()\z<0:reset=1:EndIf      
+    ;     Next   
+    ;   Next 
+    ;   
+    ;   If reset=1
+    ;     CopyStructure(@temp,*target,cluster)
+    ;   Else  
+    
     *target\maxy+1
     *target\miny+1
     
@@ -1401,15 +1363,14 @@ Procedure sediment_cluster(*target.cluster)
       *target\particles(i)\miny+1
       
     Next 
-  Else
     
+  Else
     
     For i=0 To *target\nr_particles-1 
       
       MoveEntity(*target\particles(i)\entity_handle,0,-1,0)
       
     Next i
-    
     
   EndIf  
   
@@ -1418,198 +1379,201 @@ EndProcedure
 
 Procedure calc_gyration(*target.cluster)
   
-  Dim centers.d(2)
-  count.i
-  
-  For i=0 To ArraySize(*target\particles())
-    For j=0 To ArraySize(*target\particles(i)\points())
-      count+1
-      centers(0)+*target\particles(i)\points(j)\x
-      centers(1)+*target\particles(i)\points(j)\y
-      centers(2)+*target\particles(i)\points(j)\z
-    Next   
-  Next 
-  centers(0)/count
-  centers(1)/count
-  centers(2)/count
-  
-  temp.d=0
-  For i=0 To ArraySize(*target\particles())
-    For j=0 To ArraySize(*target\particles(i)\points())
-      temp+Pow(*target\particles(i)\points(j)\x-centers(0),2)
-      temp+Pow(*target\particles(i)\points(j)\y-centers(1),2)
-      temp+Pow(*target\particles(i)\points(j)\z-centers(2),2)
-    Next   
-  Next
-  
-  *target\gyration=Sqr(temp/count)*dx
-  
+    Dim centers.d(2)
+    count.i
+       
+    For i=0 To ArraySize(*target\particles())
+      For j=0 To ArraySize(*target\particles(i)\points())
+        count+1
+        centers(0)+*target\particles(i)\points(j)\x
+        centers(1)+*target\particles(i)\points(j)\y
+        centers(2)+*target\particles(i)\points(j)\z
+      Next   
+    Next 
+    centers(0)/count
+    centers(1)/count
+    centers(2)/count
+    
+    temp.d=0
+    For i=0 To ArraySize(*target\particles())
+      For j=0 To ArraySize(*target\particles(i)\points())
+        temp+Pow(*target\particles(i)\points(j)\x-centers(0),2)
+        temp+Pow(*target\particles(i)\points(j)\y-centers(1),2)
+        temp+Pow(*target\particles(i)\points(j)\z-centers(2),2)
+      Next   
+    Next
+    
+    *target\gyration=Sqr(temp/count)*dx
+
 EndProcedure
 
 Procedure calc_fractal_dim(*target.cluster)
-  
-  Dim fractal.xyd(0)
-  count=-1
-  size.i=*target\diameter/dx/2
-  While size>1 And it_depth<6   ;box counting
-    it_depth+1
-    
-    count+1
-    ReDim fractal.xyd(count)
-    fractal(count)\x=size
-    boxes=Round(*target\diameter/dx/size,#PB_Round_Up)
-    
-    particlesize=SizeOf(particle)
-    pointsize=SizeOf(coordinates)
-    res.i
-    
-    !xor rbx,rbx
-    !mov rax,[p.p_target]    
-    !mov r8,[p.v_boxes]  
-    !mov r11,[rax+16]
-    !.xloop:
-    !mov r9,[p.v_boxes]
-    !mov r12,[rax+32]
-    !.yloop:
-    !mov r10,[p.v_boxes]
-    !mov r13,[rax+48]
-    !.zloop:
-    !mov rdx,[rax]
-    !mov rcx,[rax+56]
-    !.particleloop:
-    !mov rsi,[rdx]
-    !mov rdi,[rdx+56]
-    !.pointloop:
-    !mov r14,[rsi]
-    !cmp r14,r11
-    !jl .outpoint 
-    !sub r14,[p.v_size]
-    !cmp r14,r11
-    !jge .outpoint
-    !mov r14,[rsi+8]
-    !cmp r14,r12
-    !jl .outpoint 
-    !sub r14,[p.v_size]
-    !cmp r14,r12
-    !jge .outpoint
-    !mov r14,[rsi+16]
-    !cmp r14,r13
-    !jl .outpoint 
-    !sub r14,[p.v_size]
-    !cmp r14,r13
-    !jge .outpoint
-    !add rbx,1
-    !jmp .outbox
-    !.outpoint:
-    !add rsi,[p.v_pointsize]
-    !sub rdi,1
-    !jnz .pointloop    
-    !add rdx,[p.v_particlesize]
-    !sub rcx,1
-    !jnz .particleloop
-    !.outbox:
-    !add r13,[p.v_size]
-    !sub r10,1
-    !jnz .zloop    
-    !add r12,[p.v_size]
-    !sub r9,1
-    !jnz .yloop    
-    !add r11,[p.v_size]
-    !sub r8,1
-    !jnz .xloop
-    !mov qword [p.v_res],rbx
-    
-    fractal(count)\y=res
-    
-    If Round(0.7*size,#PB_Round_Up)<size
-      size=Round(0.7*size,#PB_Round_Up) 
-    Else
-      size-1
-    EndIf  
-  Wend ;0.05*clusters(a)\diameter/dx
-  If size<=1
-    *target\fractal_dim=3
-    
-  Else  
-
-    ;Debug "start"
-    For i=0 To count
-      fractal(i)\x=Log10(fractal(i)\x)
-      ; Debug fractal(i)\x
-    Next i
-    ;Debug "----"
-    For i=0 To count
-      fractal(i)\y=Log10(fractal(i)\y)
-      ; Debug fractal(i)\y
-    Next i
-    
-    
-    delta.d=1.0001  ;levenberg marquardt fit
-    lambda.d=0.001   
-    ssr.d
-    iterationstiefe=0
-    Dim parameters.d(1)
-    parameters(0)=fractal(count)\y
-    parameters(1)=-3
-    Repeat
-      iterationstiefe+1
-      Dim ableitungen.d(2,count)
-      Dim ergebnisvektor.d(1,0)
-      Dim J.d(count,1)
-      Dim J_invers.d(1,count)
-      Dim Q_vektor.d(count,0)
-      Dim JTJ.d(1,1)
-      Dim JTJ_invers.d(1,1)
-      For i=0 To count
-        ableitungen(2,i)=parameters(0)+parameters(1)*fractal(i)\x;Pow(fractal(i)\x,parameters(1))
-      Next i       
-      ssr=0
-      For i=0 To count
-        ssr+Pow(ableitungen(2,i)-fractal(i)\y,2)
-      Next i  
+   
+    Dim fractal.xyd(0)
+    count=-1
+    size.i=*target\diameter/dx/2
+    While size>1 And it_depth<6   ;box counting
+      it_depth+1
       
-      For i=0 To count
-        ableitungen(0,i)=parameters(0)*delta+fractal(i)\x*parameters(1);*Pow(fractal(i)\x,parameters(1))
-        ableitungen(1,i)=parameters(0)+delta*fractal(i)\x*parameters(1);*Pow(fractal(i)\x,parameters(1)*delta)
-      Next i 
+      count+1
+      ReDim fractal.xyd(count)
+      fractal(count)\x=size
+      boxes=Round(*target\diameter/dx/size,#PB_Round_Up)
       
-      For i=0 To count
-        J(i,0)=(ableitungen(0,i)-ableitungen(2,i))/(((delta-1)*parameters(0)))
-        J(i,1)=(ableitungen(1,i)-ableitungen(2,i))/(((delta-1)*parameters(1)))
-        Q_vektor(i,0)=fractal(i)\y-ableitungen(2,i)
-      Next i 
+      particlesize=SizeOf(particle)
+      pointsize=SizeOf(coordinates)
+      res.i
+     
+      !xor rbx,rbx
+      !mov rax,[p.p_target]    
+      !mov r8,[p.v_boxes]  
+      !mov r11,[rax+16]
+      !.xloop:
+      !mov r9,[p.v_boxes]
+      !mov r12,[rax+32]
+      !.yloop:
+      !mov r10,[p.v_boxes]
+      !mov r13,[rax+48]
+      !.zloop:
+      !mov rdx,[rax]
+      !mov rcx,[rax+56]
+      !.particleloop:
+      !mov rsi,[rdx]
+      !mov rdi,[rdx+56]
+      !.pointloop:
+      !mov r14,[rsi]
+      !cmp r14,r11
+      !jl .outpoint 
+      !sub r14,[p.v_size]
+      !cmp r14,r11
+      !jge .outpoint
+      !mov r14,[rsi+8]
+      !cmp r14,r12
+      !jl .outpoint 
+      !sub r14,[p.v_size]
+      !cmp r14,r12
+      !jge .outpoint
+      !mov r14,[rsi+16]
+      !cmp r14,r13
+      !jl .outpoint 
+      !sub r14,[p.v_size]
+      !cmp r14,r13
+      !jge .outpoint
+      !add rbx,1
+      !jmp .outbox
+      !.outpoint:
+      !add rsi,[p.v_pointsize]
+      !sub rdi,1
+      !jnz .pointloop    
+      !add rdx,[p.v_particlesize]
+      !sub rcx,1
+      !jnz .particleloop
+      !.outbox:
+      !add r13,[p.v_size]
+      !sub r10,1
+      !jnz .zloop    
+      !add r12,[p.v_size]
+      !sub r9,1
+      !jnz .yloop    
+      !add r11,[p.v_size]
+      !sub r8,1
+      !jnz .xloop
+      !mov qword [p.v_res],rbx
       
-      matrix_multi(J(),J(),JTJ(),1,0)
+      fractal(count)\y=res
       
-      For i=0 To 1
-        JTJ(i,i)+lambda
-      Next i
-      
-      matrix_inv(JTJ(),JTJ_invers())
-      matrix_multi(JTJ_invers(),J(),J_invers(),0,1)
-      matrix_multi(J_invers(),Q_vektor(),ergebnisvektor(),0,0)
-      parameters(0)+ergebnisvektor(0,0)
-      parameters(1)+ergebnisvektor(1,0) 
-      temp=ssr
-      ssr=0
-      For i=0 To count
-        ableitungen(2,i)=parameters(0)+fractal(i)\x*parameters(1);Pow(fractal(i)\x,parameters(1))
-        ssr+Pow(ableitungen(2,i)-fractal(i)\y,2)
-      Next i
-      If Not ssr<temp
-        parameters(0)-ergebnisvektor(0,0)
-        parameters(1)-ergebnisvektor(1,0)       
-        lambda*100
-        ok=0
+      If Round(0.7*size,#PB_Round_Up)<size
+        size=Round(0.7*size,#PB_Round_Up) 
       Else
-        lambda/10
-        ok=1
+        size-1
       EndIf  
-    Until iterationstiefe=100 Or (temp/ssr<1.00000001 And ok) Or lambda>Pow(10,15)
-    If Not IsNAN(parameters(1)):*target\fractal_dim=-parameters(1):EndIf
-    If *target\fractal_dim<=1.2:*target\fractal_dim=1.2:EndIf   ;fractal dimension might be 1 for goethite rods and thus, hydrodynamic radius diverges
-    
-  EndIf
+    Wend ;0.05*clusters(a)\diameter/dx
+    If size<=1
+      *target\fractal_dim=3
+      
+    Else  
+      ;   Debug res
+      ;   Debug test
+      ;   CallDebugger
+      
+      ;Debug "start"
+      For i=0 To count
+        fractal(i)\x=Log10(fractal(i)\x)
+        ; Debug fractal(i)\x
+      Next i
+      ;Debug "----"
+      For i=0 To count
+        fractal(i)\y=Log10(fractal(i)\y)
+        ; Debug fractal(i)\y
+      Next i
+      
+      
+      delta.d=1.0001  ;levenberg marquardt fit
+      lambda.d=0.001   
+      ssr.d
+      iterationstiefe=0
+      Dim parameters.d(1)
+      parameters(0)=fractal(count)\y
+      parameters(1)=-3
+      Repeat
+        iterationstiefe+1
+        Dim ableitungen.d(2,count)
+        Dim ergebnisvektor.d(1,0)
+        Dim J.d(count,1)
+        Dim J_invers.d(1,count)
+        Dim Q_vektor.d(count,0)
+        Dim JTJ.d(1,1)
+        Dim JTJ_invers.d(1,1)
+        For i=0 To count
+          ableitungen(2,i)=parameters(0)+parameters(1)*fractal(i)\x;Pow(fractal(i)\x,parameters(1))
+        Next i       
+        ssr=0
+        For i=0 To count
+          ssr+Pow(ableitungen(2,i)-fractal(i)\y,2)
+        Next i  
+        
+        For i=0 To count
+          ableitungen(0,i)=parameters(0)*delta+fractal(i)\x*parameters(1);*Pow(fractal(i)\x,parameters(1))
+          ableitungen(1,i)=parameters(0)+delta*fractal(i)\x*parameters(1);*Pow(fractal(i)\x,parameters(1)*delta)
+        Next i 
+        
+        For i=0 To count
+          J(i,0)=(ableitungen(0,i)-ableitungen(2,i))/(((delta-1)*parameters(0)))
+          J(i,1)=(ableitungen(1,i)-ableitungen(2,i))/(((delta-1)*parameters(1)))
+          Q_vektor(i,0)=fractal(i)\y-ableitungen(2,i)
+        Next i 
+        
+        matrix_multi(J(),J(),JTJ(),1,0)
+        
+        For i=0 To 1
+          JTJ(i,i)+lambda
+        Next i
+        
+        matrix_inv(JTJ(),JTJ_invers())
+        matrix_multi(JTJ_invers(),J(),J_invers(),0,1)
+        matrix_multi(J_invers(),Q_vektor(),ergebnisvektor(),0,0)
+        parameters(0)+ergebnisvektor(0,0)
+        parameters(1)+ergebnisvektor(1,0) 
+        temp=ssr
+        ssr=0
+        For i=0 To count
+          ableitungen(2,i)=parameters(0)+fractal(i)\x*parameters(1);Pow(fractal(i)\x,parameters(1))
+          ssr+Pow(ableitungen(2,i)-fractal(i)\y,2)
+        Next i
+        If Not ssr<temp
+          parameters(0)-ergebnisvektor(0,0)
+          parameters(1)-ergebnisvektor(1,0)       
+          lambda*100
+          ok=0
+        Else
+          lambda/10
+          ok=1
+        EndIf  
+      Until iterationstiefe=100 Or (temp/ssr<1.00000001 And ok) Or lambda>Pow(10,15)
+      If Not IsNAN(parameters(1)):*target\fractal_dim=-parameters(1):EndIf
+      If *target\fractal_dim<=1.2:*target\fractal_dim=1.2:EndIf   ;fractal dimension might be 1 for goethite rods and thus, hydrodynamic radius diverges
+      
+    EndIf
   
 EndProcedure  
 
@@ -1617,7 +1581,7 @@ Procedure.i merge_clusters(cluster_a.i,cluster_b.i,particle_a.i,particle_b.i)
   
   temp.d
   count.i
-  
+            
   If clusters(cluster_b)\maxx>clusters(cluster_a)\maxx:clusters(cluster_a)\maxx=clusters(cluster_b)\maxx:EndIf
   If clusters(cluster_b)\maxy>clusters(cluster_a)\maxy:clusters(cluster_a)\maxy=clusters(cluster_b)\maxy:EndIf
   If clusters(cluster_b)\maxz>clusters(cluster_a)\maxz:clusters(cluster_a)\maxz=clusters(cluster_b)\maxz:EndIf
@@ -1629,13 +1593,13 @@ Procedure.i merge_clusters(cluster_a.i,cluster_b.i,particle_a.i,particle_b.i)
   If clusters(cluster_a)\maxz-clusters(cluster_a)\minz>max:max=clusters(cluster_a)\maxz-clusters(cluster_a)\minz:EndIf
   clusters(cluster_a)\diameter=dx*(max+1)
   clusters(cluster_a)\mass+clusters(cluster_b)\mass
-  ; list_attach.i=ListSize(clusters(cluster_a)\particles(particle_a)\attached_to())+1
+ ; list_attach.i=ListSize(clusters(cluster_a)\particles(particle_a)\attached_to())+1
   AddElement(clusters(cluster_a)\particles(particle_a)\attached_to())
-  ; clusters(cluster_a)\particles(particle_a)\attached_to()\begin_of_cluster=clusters(cluster_a)\nr_particles
+ ; clusters(cluster_a)\particles(particle_a)\attached_to()\begin_of_cluster=clusters(cluster_a)\nr_particles
   clusters(cluster_a)\particles(particle_a)\attached_to()=clusters(cluster_a)\nr_particles+particle_b
   For i=0 To ArraySize(clusters(cluster_b)\particles())
     ForEach clusters(cluster_b)\particles(i)\attached_to()
-      clusters(cluster_b)\particles(i)\attached_to()+clusters(cluster_a)\nr_particles
+       clusters(cluster_b)\particles(i)\attached_to()+clusters(cluster_a)\nr_particles
       ; clusters(cluster_b)\particles(i)\attached_to()\begin_of_cluster+clusters(cluster_a)\nr_particles
     Next 
   Next i
@@ -1667,24 +1631,179 @@ Procedure.i merge_clusters(cluster_a.i,cluster_b.i,particle_a.i,particle_b.i)
   EndIf
   
   If calculate_fractals And Not (cluster_a=0 And Not mode=2)
-    ;     
-    ;     Debug clusters(a)\nr_particles
-    ;     Debug ArraySize(clusters(a)\particles())+1
+;     
+;     Debug clusters(a)\nr_particles
+;     Debug ArraySize(clusters(a)\particles())+1
     calc_fractal_dim(@clusters(cluster_a))    
   EndIf
   
   If calculate_fractals And calculate_gyration And Not (cluster_a=0 And Not mode=2)
-    
+  
     clusters(cluster_a)\hydrodyn=2*clusters(cluster_a)\gyration*(1-1/clusters(cluster_a)\fractal_dim)*Sqr(2/clusters(cluster_a)\fractal_dim+1)
     clusters(cluster_a)\diff=k_boltz*temperature/(6*#PI*0.001*clusters(cluster_a)\hydrodyn)
-    
+        
   EndIf  
   
   If clusters(cluster_a)\mass>largest_cluster
     largest_cluster=clusters(cluster_a)\mass
     nr_largest_cluster=cluster_a  
   EndIf  
+
+EndProcedure  
+
+Procedure detach(detaching_cluster.i,detaching_particle.i)
+ 
+  nr_clusters+1
+  ReDim clusters.cluster(nr_clusters)
+  old_parts=clusters(detaching_cluster)\nr_particles-1
+  Dim detachers.i(old_parts)
+  Dim detachers_cum.i(old_parts)
+  detachers(detaching_particle)=1
   
+  ;find all particles that are going to be detached and store in detachers; 
+  ;detachers_cum contains the cumulative offset needed to construct the detached clusters correctly
+  Repeat
+    found=0
+    For i=0 To old_parts
+      If detachers(i)=1
+      ForEach clusters(detaching_cluster)\particles(i)\attached_to()
+        If detachers(clusters(detaching_cluster)\particles(i)\attached_to())=0
+          detachers(clusters(detaching_cluster)\particles(i)\attached_to())=1
+          found=1
+        EndIf  
+        Next  
+
+      EndIf
+    Next i 
+    
+    For i=0 To old_parts
+      ForEach clusters(detaching_cluster)\particles(i)\attached_to()
+        If detachers(clusters(detaching_cluster)\particles(i)\attached_to()) And Not detachers(i)=1
+          detachers(i)=1
+          found=1
+        EndIf  
+      Next   
+    Next i  
+  Until Not found  
+  
+  If detaching_cluster=0 And Not mode=2 And detachers(0)=1
+    ;it might happen that upon dtaching the wrong numbering appears as a beforehand inwards directed attachemt attahces to the wall. On detachment the wall will be released....
+    For i=0 To old_parts
+      If detachers(i):detachers(i)=0:Else:detachers(i)=1:EndIf
+    Next   
+  EndIf 
+  
+  detachers_cum(0)=detachers(0)
+  For i=1 To old_parts
+    detachers_cum(i)=detachers_cum(i-1)+detachers(i)
+  Next i  
+  
+ 
+  
+  Dim clusters(nr_clusters)\particles.particle(detachers_cum(old_parts)-1)
+    
+;set attachemtn pointer to new cluster strcuture
+  For i=0 To old_parts
+    ForEach clusters(detaching_cluster)\particles(i)\attached_to()
+      If detachers(clusters(detaching_cluster)\particles(i)\attached_to())
+         clusters(detaching_cluster)\particles(i)\attached_to()=detachers_cum(clusters(detaching_cluster)\particles(i)\attached_to())-1
+      Else        
+         clusters(detaching_cluster)\particles(i)\attached_to()-detachers_cum(clusters(detaching_cluster)\particles(i)\attached_to())
+      EndIf  
+     Next  
+  Next i
+   
+  ;remove detached part fom the cluster
+  count=-1
+  For i=0 To old_parts
+    If detachers(i)
+      count+1
+      CopyStructure(@clusters(detaching_cluster)\particles(i),@clusters(nr_clusters)\particles(count),particle)   
+    Else  
+      If count>=0
+        CopyStructure(@clusters(detaching_cluster)\particles(i),@clusters(detaching_cluster)\particles(i-detachers_cum(i)),particle)  
+      EndIf  
+    EndIf    
+  Next i
+  ReDim clusters(detaching_cluster)\particles.particle(old_parts-detachers_cum(old_parts))
+
+  clusters(detaching_cluster)\maxx=-1
+  clusters(detaching_cluster)\maxy=-1
+  clusters(detaching_cluster)\maxz=-1
+  clusters(nr_clusters)\maxx=-1
+  clusters(nr_clusters)\maxy=-1
+  clusters(nr_clusters)\maxz=-1
+  clusters(detaching_cluster)\minx=nx+1
+  clusters(detaching_cluster)\miny=ny+1
+  clusters(detaching_cluster)\minz=nz+1
+  clusters(nr_clusters)\minx=nx+1
+  clusters(nr_clusters)\miny=ny+1
+  clusters(nr_clusters)\minz=nz+1
+  
+  For i=0 To ArraySize(clusters(detaching_cluster)\particles())
+    If clusters(detaching_cluster)\particles(i)\maxx>clusters(detaching_cluster)\maxx:clusters(detaching_cluster)\maxx=clusters(detaching_cluster)\particles(i)\maxx:EndIf
+    If clusters(detaching_cluster)\particles(i)\maxy>clusters(detaching_cluster)\maxy:clusters(detaching_cluster)\maxy=clusters(detaching_cluster)\particles(i)\maxy:EndIf
+    If clusters(detaching_cluster)\particles(i)\maxz>clusters(detaching_cluster)\maxz:clusters(detaching_cluster)\maxz=clusters(detaching_cluster)\particles(i)\maxz:EndIf
+    If clusters(detaching_cluster)\particles(i)\minx<clusters(detaching_cluster)\minx:clusters(detaching_cluster)\minx=clusters(detaching_cluster)\particles(i)\minx:EndIf
+    If clusters(detaching_cluster)\particles(i)\miny<clusters(detaching_cluster)\miny:clusters(detaching_cluster)\miny=clusters(detaching_cluster)\particles(i)\miny:EndIf
+    If clusters(detaching_cluster)\particles(i)\minz<clusters(detaching_cluster)\minz:clusters(detaching_cluster)\minz=clusters(detaching_cluster)\particles(i)\minz:EndIf
+  Next i  
+  
+  max=clusters(detaching_cluster)\maxx-clusters(detaching_cluster)\minx
+  If clusters(detaching_cluster)\maxy-clusters(detaching_cluster)\miny>max:max=clusters(detaching_cluster)\maxy-clusters(detaching_cluster)\miny:EndIf
+  If clusters(detaching_cluster)\maxz-clusters(detaching_cluster)\minz>max:max=clusters(detaching_cluster)\maxz-clusters(detaching_cluster)\minz:EndIf
+  clusters(detaching_cluster)\diameter=dx*(max+1)
+  clusters(detaching_cluster)\mass=0
+  For i=0 To ArraySize(clusters(detaching_cluster)\particles())
+    clusters(detaching_cluster)\mass+clusters(detaching_cluster)\particles(i)\mass
+  Next i   
+  clusters(detaching_cluster)\nr_particles=ArraySize(clusters(detaching_cluster)\particles())+1
+  
+  For i=0 To ArraySize(clusters(nr_clusters)\particles())  
+    If clusters(nr_clusters)\particles(i)\maxx>clusters(nr_clusters)\maxx:clusters(nr_clusters)\maxx=clusters(nr_clusters)\particles(i)\maxx:EndIf
+    If clusters(nr_clusters)\particles(i)\maxy>clusters(nr_clusters)\maxy:clusters(nr_clusters)\maxy=clusters(nr_clusters)\particles(i)\maxy:EndIf
+    If clusters(nr_clusters)\particles(i)\maxz>clusters(nr_clusters)\maxz:clusters(nr_clusters)\maxz=clusters(nr_clusters)\particles(i)\maxz:EndIf
+    If clusters(nr_clusters)\particles(i)\minx<clusters(nr_clusters)\minx:clusters(nr_clusters)\minx=clusters(nr_clusters)\particles(i)\minx:EndIf
+    If clusters(nr_clusters)\particles(i)\miny<clusters(nr_clusters)\miny:clusters(nr_clusters)\miny=clusters(nr_clusters)\particles(i)\miny:EndIf
+    If clusters(nr_clusters)\particles(i)\minz<clusters(nr_clusters)\minz:clusters(nr_clusters)\minz=clusters(nr_clusters)\particles(i)\minz:EndIf
+  Next i  
+  
+  max=clusters(nr_clusters)\maxx-clusters(nr_clusters)\minx
+  If clusters(nr_clusters)\maxy-clusters(nr_clusters)\miny>max:max=clusters(nr_clusters)\maxy-clusters(nr_clusters)\miny:EndIf
+  If clusters(nr_clusters)\maxz-clusters(nr_clusters)\minz>max:max=clusters(nr_clusters)\maxz-clusters(nr_clusters)\minz:EndIf
+  clusters(nr_clusters)\diameter=dx*(max+1)
+  clusters(nr_clusters)\mass=0
+  For i=0 To ArraySize(clusters(nr_clusters)\particles())
+    clusters(nr_clusters)\mass+clusters(nr_clusters)\particles(i)\mass
+  Next i   
+  clusters(nr_clusters)\nr_particles=ArraySize(clusters(nr_clusters)\particles())+1
+  
+  If calculate_gyration
+    calc_gyration(@clusters(nr_clusters))
+    If Not (detach_cluster=0 And Not mode=2):calc_gyration(@clusters(detaching_cluster)):EndIf
+  EndIf
+ 
+  If calculate_fractals
+ ;   Debug "fromdetach"
+    calc_fractal_dim(@clusters(nr_clusters))
+    If Not (detach_cluster=0 And Not mode=2):calc_fractal_dim(@clusters(detaching_cluster)):EndIf
+  EndIf
+  
+  If calculate_fractals And calculate_gyration
+    If Not (detach_cluster=0 And Not mode=2)
+      clusters(detaching_cluster)\hydrodyn=2*clusters(detaching_cluster)\gyration*(1-1/clusters(detaching_cluster)\fractal_dim)*Sqr(2/clusters(detaching_cluster)\fractal_dim+1)
+      clusters(detaching_cluster)\diff=k_boltz*temperature/(6*#PI*0.001*clusters(detaching_cluster)\hydrodyn)    
+    EndIf
+    clusters(nr_clusters)\hydrodyn=2*clusters(nr_clusters)\gyration*(1-1/clusters(nr_clusters)\fractal_dim)*Sqr(2/clusters(nr_clusters)\fractal_dim+1)
+    clusters(nr_clusters)\diff=k_boltz*temperature/(6*#PI*0.001*clusters(nr_clusters)\hydrodyn)
+        
+  EndIf  
+  
+  largest_cluster=0
+  For i=0 To nr_clusters
+    If clusters(i)\mass>largest_cluster:largest_cluster=clusters(i)\mass:nr_largest_cluster=i:EndIf
+  Next i  
+    
 EndProcedure  
 
 Procedure check_attachment(*target.cluster,index.i,*result.attach_info) ;inputindex to skip attachment to self, returns attach_info
@@ -1778,11 +1897,14 @@ Procedure check_attachment(*target.cluster,index.i,*result.attach_info) ;inputin
   *result\attached_to_cluster=0
   *result\attached_to_particle=0
   *result\attaching_part=0
-  
+   
 EndProcedure  
 
 Procedure set_mineral_shapes()
   
+  ;   ClearList(plate())
+  ;   ClearList(rod())
+  ;   ClearList(sphere())
   count=-1
   For i=0 To plate_length:For j=0 To plate_width:For k=0 To plate_thickness
         count+1
@@ -1842,7 +1964,28 @@ Procedure set_mineral_shapes()
   sphere\maxy=sphere_diameter
   sphere\maxz=sphere_diameter
   
-
+  ; count=-1
+  ; For i=0 To sphere_diameter:For j=0 To sphere_diameter:For k=0 To sphere_diameter
+  ;        a=i-(sphere_diameter+1)/2
+  ;        b=j-(sphere_diameter+1)/2
+  ;        c=k-(sphere_diameter+1)/2
+  ;        If Sqr(a*a+b*b+c*c)<=(sphere_diameter+1)/2 And Sqr(a*a+b*b+c*c)>=(sphere_diameter+1)/2-2        
+  ;          count+1
+  ;          ReDim sphere_reduced\points.coordinates(count)
+  ;          sphere_reduced\points(count)\x=i
+  ;          sphere_reduced\points(count)\y=j
+  ;          sphere_reduced\points(count)\z=k
+  ;        EndIf
+  ;  Next k:Next j:Next i
+  ;  
+  ;  sphere_reduced\maxx=sphere_diameter
+  ;  sphere_reduced\maxy=sphere_diameter
+  ;  sphere_reduced\maxz=sphere_diameter
+  
+  ;  max=0
+  ; If qz_length>max:max=qz_length:EndIf
+  ; If qz_height>max:max=qz_height:EndIf
+  ; If qz_width>max:max=qz_width:EndIf
   sphere\diameter=dx*(sphere_diameter+1)
   ;  sphere_reduced\diameter=dx*(sphere_diameter+1)
   
@@ -1855,59 +1998,103 @@ Procedure set_mineral_shapes()
   rod\nr_points=ArraySize(rod\points())+1
   plate\nr_points=ArraySize(plate\points())+1
   
+;   temp.d=0
+;   count=0 
+;   For j=0 To ArraySize(sphere\points()) 
+;     count+1
+;     x.i=sphere\points(j)\x
+;     y.i=sphere\points(j)\y
+;     z.i=sphere\points(j)\z
+;     For l=0 To ArraySize(sphere\points())    
+;       temp+Pow(sphere\points(l)\x-x,2)
+;       temp+Pow(sphere\points(l)\y-y,2)
+;       temp+Pow(sphere\points(l)\z-z,2)
+;     Next l  
+;   Next j
+;   sphere_gyration=Sqr(temp/(2*Pow(count,2)))*dx
+  
   sphere_gyration=(sphere_diameter+1)*dx/2*Sqr(3/5)
   
-  ;   If sphere_gyration=0:sphere_gyration=dx/2:EndIf
+;   If sphere_gyration=0:sphere_gyration=dx/2:EndIf
   
   temp.d=0
   count=0 
-  
-  Dim centers.d(2)
-  For j=0 To ArraySize(rod\points()) 
-    count+1
-    centers(0)+rod\points(j)\x
-    centers(1)+rod\points(j)\y
-    centers(2)+rod\points(j)\z
-  Next   
-  
-  centers(0)/count
-  centers(1)/count
-  centers(2)/count
-  
-  temp=0
-  
-  For j=0 To ArraySize(rod\points()) 
-    temp+Pow(rod\points(j)\x-centers(0),2)
-    temp+Pow(rod\points(j)\y-centers(1),2)
-    temp+Pow(rod\points(j)\z-centers(2),2)
-  Next   
-  
-  
-  rod_gyration=Sqr(temp/count)*dx
-  
+;   For j=0 To ArraySize(rod\points()) 
+;     count+1
+;     x.i=rod\points(j)\x
+;     y.i=rod\points(j)\y
+;     z.i=rod\points(j)\z
+;     For l=0 To ArraySize(rod\points())    
+;       temp+Pow(rod\points(l)\x-x,2)
+;       temp+Pow(rod\points(l)\y-y,2)
+;       temp+Pow(rod\points(l)\z-z,2)
+;     Next l  
+;   Next j
+;   rod_gyration=Sqr(temp/(2*Pow(count,2)))*dx    
+;   If rod_gyration=0:rod_gyration=dx/2:EndIf
+
+
+   Dim centers.d(2)
+      For j=0 To ArraySize(rod\points()) 
+        count+1
+        centers(0)+rod\points(j)\x
+        centers(1)+rod\points(j)\y
+        centers(2)+rod\points(j)\z
+      Next   
+   
+    centers(0)/count
+    centers(1)/count
+    centers(2)/count
+    
+    temp=0
+
+      For j=0 To ArraySize(rod\points()) 
+        temp+Pow(rod\points(j)\x-centers(0),2)
+        temp+Pow(rod\points(j)\y-centers(1),2)
+        temp+Pow(rod\points(j)\z-centers(2),2)
+      Next   
+   
+    
+    rod_gyration=Sqr(temp/count)*dx
+
   
   temp.d=0
   count=0 
+;   For j=0 To ArraySize(plate\points()) 
+;     count+1
+;     x.i=plate\points(j)\x
+;     y.i=plate\points(j)\y
+;     z.i=plate\points(j)\z
+;     For l=0 To ArraySize(plate\points())    
+;       temp+Pow(plate\points(l)\x-x,2)
+;       temp+Pow(plate\points(l)\y-y,2)
+;       temp+Pow(plate\points(l)\z-z,2)
+;     Next l  
+;   Next j
+;   plate_gyration=Sqr(temp/(2*Pow(count,2)))*dx
+;   If plate_gyration=0:plate_gyration=dx/2:EndIf
+
+
   
-  Dim centers.d(2)
-  For j=0 To ArraySize(plate\points()) 
-    count+1
-    centers(0)+plate\points(j)\x
-    centers(1)+plate\points(j)\y
-    centers(2)+plate\points(j)\z
-  Next   
-  
-  centers(0)/count
-  centers(1)/count
-  centers(2)/count
-  
-  For j=0 To ArraySize(plate\points()) 
-    temp+Pow(plate\points(j)\x-centers(0),2)
-    temp+Pow(plate\points(j)\y-centers(1),2)
-    temp+Pow(plate\points(j)\z-centers(2),2)
-  Next   
-  plate_gyration=Sqr(temp/count)*dx
-  
+     Dim centers.d(2)
+      For j=0 To ArraySize(plate\points()) 
+        count+1
+        centers(0)+plate\points(j)\x
+        centers(1)+plate\points(j)\y
+        centers(2)+plate\points(j)\z
+      Next   
+   
+    centers(0)/count
+    centers(1)/count
+    centers(2)/count
+    
+    For j=0 To ArraySize(plate\points()) 
+        temp+Pow(plate\points(j)\x-centers(0),2)
+        temp+Pow(plate\points(j)\y-centers(1),2)
+        temp+Pow(plate\points(j)\z-centers(2),2)
+      Next   
+      plate_gyration=Sqr(temp/count)*dx
+   
 EndProcedure  
 
 Procedure init_field()
@@ -1919,7 +2106,7 @@ Procedure init_field()
   Global Dim field_info.field_information(nx,ny,nz)
   
   ReDim profiles.i(3,ny)
-  handle_temp.i
+  
   nr_clusters=-1
   If mode=1 Or mode=3     ;DLA mode
     clusters(0)\diff=0
@@ -1948,8 +2135,6 @@ Procedure init_field()
         clusters(0)\maxy=ny/2
         clusters(0)\minz=nz/2
         clusters(0)\maxz=nz/2
-        ;entities must be adapted
-        ;         clusters(0)\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(sphere_m), MaterialID(material_sphere),(clusters(0)\particles(0)\maxx+clusters(0)\particles(0)\minx)/2,(clusters(0)\particles(0)\maxy+clusters(0)\particles(0)\miny)/2,(clusters(0)\particles(0)\maxz+clusters(0)\particles(0)\minz)/2)
         field(nx/2,ny/2,nz/2)=1
         field_info(nx/2,ny/2,nz/2)\cluster=1
         field_info(nx/2,ny/2,nz/2)\particle=1
@@ -1983,9 +2168,6 @@ Procedure init_field()
         clusters(0)\maxy=ny
         clusters(0)\minz=0
         clusters(0)\maxz=nz
-        ;entities must be adapted
-        clusters(0)\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(sphere_m), MaterialID(material_sphere),(clusters(0)\particles(0)\maxx+clusters(0)\particles(0)\minx)/2,(clusters(0)\particles(0)\maxy+clusters(0)\particles(0)\miny)/2,(clusters(0)\particles(0)\maxz+clusters(0)\particles(0)\minz)/2)
-        
       Case 3
         clusters(0)\particles(0)\nr_points=(nx+1)*(ny+1)*2
         ReDim clusters(0)\particles(0)\points.coordinates(2*(nx+1)*(ny+1)-2)
@@ -2025,9 +2207,6 @@ Procedure init_field()
         clusters(0)\maxy=ny
         clusters(0)\minz=n0
         clusters(0)\maxz=nz
-        ;entities must be adapted
-        ;                clusters(0)\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(sphere_m), MaterialID(material_sphere),(clusters(0)\particles(0)\maxx+clusters(0)\particles(0)\minx)/2,(clusters(0)\particles(0)\maxy+clusters(0)\particles(0)\miny)/2,(clusters(0)\particles(0)\maxz+clusters(0)\particles(0)\minz)/2)
-        
       Case 4
         clusters(0)\particles(0)\nr_points=(nx+1)*(ny+1)*3
         ReDim clusters(0)\particles(0)\points.coordinates(3*(nx+1)*(ny+1)-3)
@@ -2076,10 +2255,8 @@ Procedure init_field()
         clusters(0)\maxx=nx
         clusters(0)\miny=0
         clusters(0)\maxy=ny
-        clusters(0)\minz=0
+        clusters(0)\minz=n0
         clusters(0)\maxz=nz
-        ;entities must be adapted
-        ;                clusters(0)\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(sphere_m), MaterialID(material_sphere),(clusters(0)\particles(0)\maxx+clusters(0)\particles(0)\minx)/2,(clusters(0)\particles(0)\maxy+clusters(0)\particles(0)\miny)/2,(clusters(0)\particles(0)\maxz+clusters(0)\particles(0)\minz)/2)
         
     EndSelect
   EndIf 
@@ -2103,8 +2280,7 @@ Procedure init_field()
     ; Dim temp\particles\points.coordinates(size_sphere)
     count=0
     temp\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(sphere_m), MaterialID(material_sphere))
-    Repeat
-      
+    Repeat      
       FreeEntity(temp\particles(0)\entity_handle)
       count+1
       CopyStructure(@sphere,@temp\particles(0),particle)
@@ -2142,8 +2318,8 @@ Procedure init_field()
       temp\particles(0)\rotation(1,1)=1
       temp\particles(0)\rotation(2,2)=1
       temp\particles(0)\rot\w=1
-      MoveEntity(temp\particles(0)\entity_handle,(temp\maxx+temp\minx)/2,(temp\maxy+temp\miny)/2,(temp\maxz+temp\minz)/2,#PB_Absolute)
-      ; RotateEntity(temp\particles(0)\entity_handle,0,0,0,#PB_Absolute)
+            MoveEntity(temp\particles(0)\entity_handle,(temp\maxx+temp\minx)/2,(temp\maxy+temp\miny)/2,(temp\maxz+temp\minz)/2,#PB_Absolute)
+
       rotate_cluster(@temp,Random(6));Random(6)
       If count=200:MessageRequester("Warning","Could not place particles"+Chr(13)+Chr(10)+"Try to reduce amount"):End:EndIf
     Until Not check_collision(@temp) 
@@ -2151,10 +2327,10 @@ Procedure init_field()
     temp\gyration=sphere_gyration
     temp\hydrodyn=2*sphere_gyration*(1-1/3)*Sqr(2/3+1)
     temp\diff=k_boltz*temperature/(6*#PI*0.001*temp\hydrodyn)   ;Hess hydrodynmaic behavior of colloids
-                                                                ;     Debug sphere_gyration
-                                                                ;     Debug temp\hydrodyn
-                                                                ;      Debug temp\diff
-                                                                ;      CallDebugger
+;     Debug sphere_gyration
+;     Debug temp\hydrodyn
+;      Debug temp\diff
+;      CallDebugger
     ReDim clusters.cluster(nr_clusters) 
     CopyStructure(@temp,@clusters(nr_clusters),cluster)
     clusters(nr_clusters)\fractal_dim=3
@@ -2166,7 +2342,7 @@ Procedure init_field()
   Next i
   
   For i=1 To nr_gt 
-    count=0  
+    count=0
     temp\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(cylinder_m), MaterialID(material_rod))
     Repeat
       count+1
@@ -2211,7 +2387,6 @@ Procedure init_field()
       MoveEntity(temp\particles(0)\entity_handle,(temp\maxx+temp\minx)/2,(temp\maxy+temp\miny)/2,(temp\maxz+temp\minz)/2,#PB_Absolute)
       RotateEntity(temp\particles(0)\entity_handle,0,0,90,#PB_Absolute)      
       
-      
       rotate_cluster(@temp,Random(6));Random(6)
       
       If count=200:MessageRequester("Warning","Could not place particles"+Chr(13)+Chr(10)+"Try to reduce amount"):End:EndIf
@@ -2229,9 +2404,10 @@ Procedure init_field()
       field_info(temp\particles(0)\points(j)\x,temp\particles(0)\points(j)\y,temp\particles(0)\points(j)\z)\particle=1
     Next j
   Next i 
-  
+
   For i=1 To nr_il
     count=0
+    
     temp\particles(0)\entity_handle=CreateEntity(#PB_Any, MeshID(cube_m), MaterialID(material_plate))
     Repeat
       count+1      
@@ -2272,7 +2448,6 @@ Procedure init_field()
       temp\particles(0)\rotation(2,2)=1
       temp\particles(0)\rot\w=1
       MoveEntity(temp\particles(0)\entity_handle,(temp\maxx+temp\minx)/2,(temp\maxy+temp\miny)/2,(temp\maxz+temp\minz)/2,#PB_Absolute)
-      ;RotateEntity(temp\particles(0)\entity_handle,0,0,0,#PB_Absolute)
       rotate_cluster(@temp,Random(6));Random(6)
       If count=200:MessageRequester("Warning","Could not place particles"+Chr(13)+Chr(10)+"Try to reduce amount"):End:EndIf
     Until Not check_collision(@temp)      
@@ -2291,12 +2466,12 @@ Procedure init_field()
     Next j
   Next i    
   
-  For i=0 To nr_clusters
-    For j=0 To clusters(i)\nr_particles-1
-      total_mass+clusters(i)\particles(j)\nr_points
-    Next j
-  Next i  
-  
+        For i=0 To nr_clusters
+        For j=0 To clusters(i)\nr_particles-1
+          total_mass+clusters(i)\particles(j)\nr_points
+          Next j
+        Next i  
+        
   ;profiles        
   For j=0 To ny
     
@@ -2329,10 +2504,36 @@ Procedure.d gamma(psi.d)
 EndProcedure  
 
 Procedure.d kappa(conc.d)
-
+  ;   temp.d
+  ;   temp=Sqr(8*)
+  ;   temp=(Sqr((e_rel*e_zero*k_boltz*temperature)/(2*avogadro*e_charge*e_charge*conc)))
+  ;   temp=temp*Pow(10,9)
+  ;   ProcedureReturn 1/temp  
+  ;iasraelavchili
+  
+  ;1000 to derive mol/m³
   temp.d=Sqr(1000*conc*avogadro*2*e_charge*e_charge/(e_rel*e_zero*k_boltz*temperature))
 
+  ;     temp.d
+  ;   temp=(Sqr((e_rel*e_zero*k_boltz*temperature)/(2*avogadro*e_charge*e_charge*conc)))
+  ;   temp=temp
+  ;   ProcedureReturn 1/temp  
+  
   ProcedureReturn temp 
+  
+EndProcedure  
+
+Procedure.d v_born(hamaker.d,distance.d,r1.d)
+  
+  temp.d
+  
+temp=hamaker/7560*Pow(sigma,6)*((8*r1+distance)/Pow(2*r1+distance,7)+(6*r1-distance)/Pow(distance,7))
+;temp=hamaker*Pow(sigma,6)/(360*#PI*Pow(distance,8))*r1*r1
+;Debug temp
+  ; temp=distance/(2*r1)+1
+  ;temp=Pow(10,-22)/temp*((Pow(temp,2)-14*temp+54)/(Pow(temp-2,7))+(-2*Pow(temp,2)+60)/(Pow(temp,7))+(Pow(temp,2)+14*temp+54)/(Pow(temp-2,7)))
+  ;Debug temp
+  ProcedureReturn temp
   
 EndProcedure  
 
@@ -2340,7 +2541,7 @@ Procedure.d ve_ss(r1.d,r2.d,psi1.d,psi2.d,conc.d,distance.d)
   temp.d
   kappa.d=kappa(conc) 
   temp=r1*r2/(r1+r2)
-  ;1000 to derive mol/m³
+   ;1000 to derive mol/m³
   temp=temp*128*#PI*1000*conc*avogadro*k_boltz*temperature/(kappa*kappa)
   temp=temp*gamma(psi1)*gamma(psi2)*Exp(-kappa*distance)
   ;   z.d=Pow(TanH(e_charge*psi1/(4*k_boltz*temperature)),2)*Pow(k_boltz*temperature/e_charge,2)*64*#PI*e_zero*e_rel
@@ -2355,14 +2556,23 @@ Procedure.d va_ss(r1.d,r2.d,hamaker.d,distance.d)
   temp=Log((distance*distance+2*r1*distance+2*r2*distance)/(distance*distance+2*r1*distance+2*r2*distance+4*r1*r2))
   temp=temp+2*r1*r2/(distance*distance+2*r1*distance+2*r2*distance)+2*r1*r2/(distance*distance+2*r1*distance+2*r2*distance+4*r1*r2)
   temp=-temp*hamaker/6
-  ;   temp=-hamaker*r1/(12*distance)
+;     temp=-hamaker*r1/(12*distance)
   ProcedureReturn temp
   
 EndProcedure  
 
 Procedure.d vt_ss(r1.d,r2.d,distance.d,conc.d,psi1.d,psi2.d,ham.d)
   
-  temp.d=ve_ss(r1,r2,psi1,psi2,conc,distance)+va_ss(r1,r2,ham,distance)
+;     Debug v_born(ham,distance,r1)
+;   Debug ve_rp(length,r1,psi1,psi2,distance,conc)
+;   Debug va_rp(length,ham,distance,r1)
+;   Debug "--"
+;  Debug v_born(ham,distance,0.5*(r1+r2))
+;  Debug va_ss(r1,r2,ham,distance)
+;   Debug ve_ss(r1,r2,psi1,psi2,conc,distance)
+;   Debug "---"
+  temp.d=ve_ss(r1,r2,psi1,psi2,conc,distance)+va_ss(r1,r2,ham,distance)+v_born(ham,distance,0.5*(r1+r2))
+ ; Debug temp
   ProcedureReturn temp
   
 EndProcedure  
@@ -2372,6 +2582,9 @@ Procedure.d ve_pp(distance.d,conc.d,area.d,psi1.d,psi2.d)
   ;elimelech
   
   kappa.d=kappa(conc) 
+  ;   temp.d=2*psi1*psi2-(psi1*psi1+psi2*psi2)*Exp(-kappa*distance)
+  ;   temp=temp/(Exp(kappa*distance)-Exp(-kappa*distance))
+  ;   temp=temp*e_zero*e_rel*kappa*area
   
   temp.d=64000*conc*avogadro*k_boltz*temperature/kappa*gamma(psi1)*gamma(psi2)*Exp(-kappa*distance)*area
   ProcedureReturn temp
@@ -2388,8 +2601,11 @@ Procedure.d va_pp(area.d,thick.d,hamaker.d,distance.d)
 EndProcedure  
 
 Procedure.d vt_pp(area.d,thick.d,distance.d,conc.d,psi1.d,psi2.d,ham.d)
-
-  temp.d=ve_pp(distance,conc,area,psi1,psi2)+va_pp(area,thick,ham,distance)
+  ;    Debug ve(distance,conc,r1,r2,psi1,psi2)
+  ;    Debug va(r1,r2,ham,distance)
+  ;   Debug distance*Pow(10,9)
+  ;  calldebugger
+  temp.d=ve_pp(distance,conc,area,psi1,psi2)+va_pp(area,thick,ham,distance)+v_born(ham,distance,thick/2)
   ProcedureReturn temp
 EndProcedure  
 
@@ -2407,13 +2623,15 @@ Procedure.d ve_sp(r1.d,psi1.d,psi2.d,conc.d,distance.d)
   kappa.d=kappa(conc) 
   temp=r1*128000*#PI*conc*avogadro*k_boltz*temperature/(kappa*kappa)
   temp=temp*gamma(psi1)*gamma(psi2)*Exp(-kappa*distance)
-
+  
+  ;   z.d=Pow(TanH(e_charge*psi1/(4*k_boltz*temperature)),2)*Pow(k_boltz*temperature/e_charge,2)*64*#PI*e_zero*e_rel
+  ;   temp=0.5*z*r1*Exp(-kappa*distance)
   ProcedureReturn temp
 EndProcedure
 
 Procedure.d vt_sp(r1.d,distance.d,conc.d,psi1.d,psi2.d,ham.d)
   
-  temp.d=ve_sp(r1,psi1,psi2,conc,distance)+va_sp(r1,distance,ham)
+  temp.d=ve_sp(r1,psi1,psi2,conc,distance)+va_sp(r1,distance,ham)+v_born(ham,distance,r1)
   ProcedureReturn temp
   
 EndProcedure  
@@ -2437,14 +2655,18 @@ Procedure.d ve_rr(length.d,r1.d,r2.d,psi1.d,psi2.d,distance.d,conc.d)
   temp.d=Exp(-kappa*distance)
   temp=temp*psi1*psi2*e_zero*e_rel*Sqr(kappa)*2*Sqr(2*r1*r2*#PI/(r1+r2))*length
   
-
+  ;crossed
+  ;   kappa.d=kappa(conc)
+  ;   temp.d=Exp(-kappa*distance)
+  ;   temp=4*#PI*Sqr(r1*r2)*psi1*psi2*e_zero*e_rel*temp;*length
+  
   ProcedureReturn temp
   
 EndProcedure  
 
 Procedure.d vt_rr(length.d,ham.d,distance.d,r1.d,r2.d,psi1.d,psi2.d,conc.d)
   
-  temp.d=va_rr(length,ham,distance,r1,r2)+ve_rr(length,r1,r2,psi1,psi2,distance,conc)
+  temp.d=va_rr(length,ham,distance,r1,r2)+ve_rr(length,r1,r2,psi1,psi2,distance,conc)+v_born(ham,distance,0.5*(r1+r2))
   ProcedureReturn temp
   
 EndProcedure  
@@ -2470,8 +2692,8 @@ Procedure.d ve_rp(length.d,r1.d,psi1.d,psi2.d,distance.d,conc.d)
 EndProcedure  
 
 Procedure.d vt_rp(length.d,ham.d,distance.d,r1.d,psi1.d,psi2.d,conc.d)
-  
-  temp.d=va_rp(length,ham,distance,r1)+ve_rp(length,r1,psi1,psi2,distance,conc)
+
+  temp.d=va_rp(length,ham,distance,r1)+ve_rp(length,r1,psi1,psi2,distance,conc)+v_born(ham,distance,r1)
   ProcedureReturn temp
   
 EndProcedure  
@@ -2544,7 +2766,15 @@ Procedure.d energy_vs_distance_sr_as_p(distance.d)
 EndProcedure 
 
 Procedure set_interaction_energies()
-
+  ;   hamakers(1,1)=Pow(Sqr(sphere_hamaker)-Sqr(water_hamaker),2)
+  ;   hamakers(2,2)=Pow(Sqr(rod_hamaker)-Sqr(water_hamaker),2)
+  ;   hamakers(3,3)=Pow(Sqr(plate_hamaker)-Sqr(water_hamaker),2)
+  ;   hamakers(1,2)=(Sqr(sphere_hamaker)-Sqr(water_hamaker))*(Sqr(rod_hamaker)-Sqr(water_hamaker))
+  ;   hamakers(1,3)=(Sqr(sphere_hamaker)-Sqr(water_hamaker))*(Sqr(plate_hamaker)-Sqr(water_hamaker))
+  ;   hamakers(2,3)=(Sqr(rod_hamaker)-Sqr(water_hamaker))*(Sqr(plate_hamaker)-Sqr(water_hamaker))
+  ;   hamakers(2,1)=hamakers(1,2)
+  ;   hamakers(3,1)=hamakers(1,3)
+  ;   hamakers(3,2)=hamakers(2,3)
   
   ; israelavchili
   
@@ -2619,9 +2849,7 @@ Procedure set_interaction_energies()
   
   If i1>0
     i1=newtons_method(@energy_vs_distance_ss(),i1)
-    
-    ;Debug i1
-    energies(1,1)=energy_vs_distance_ss(i1)/(k_boltz*temperature)
+    If Not IsNAN(i1):energies(1,1)=energy_vs_distance_ss(i1)/(k_boltz*temperature):Else:energies(1,1)=0:EndIf
   Else
     energies(1,1)=0
   EndIf  
@@ -2632,7 +2860,7 @@ Procedure set_interaction_energies()
   EndIf
   If j1<1000
     j1=newtons_method(@energy_vs_distance_ss(),j1)
-    energies_detach(1,1)=energy_vs_distance_ss(j1)/(k_boltz*temperature)
+    If Not IsNAN(j1):energies_detach(1,1)=energy_vs_distance_ss(j1)/(k_boltz*temperature):Else:energies_detach(1,1)=Infinity():EndIf
   Else  
     energies_detach(1,1)=Infinity()
   EndIf  
@@ -2641,15 +2869,15 @@ Procedure set_interaction_energies()
   Else
     chances_detach(1,1)=kappa(ionic_strength)*(sphere\diameter)*Exp(-(energies(1,1)-energies_detach(1,1)))
   EndIf  
-  
+ 
   ;sphere rod
   If i2>0
     If sphere_diameter>rod_diameter 
       i2=newtons_method(@energy_vs_distance_rs_as_p(),i2)
-      energies(1,2)=energy_vs_distance_rs_as_p(i2)/(k_boltz*temperature)
+      If Not IsNAN(i2):energies(1,2)=energy_vs_distance_rs_as_p(i2)/(k_boltz*temperature):Else:energies(1,2)=0:EndIf
     Else
       i2=newtons_method(@energy_vs_distance_sr_as_p(),i2)
-      energies(1,2)=energy_vs_distance_sr_as_p(i2)/(k_boltz*temperature)
+      If Not IsNAN(i2):energies(1,2)=energy_vs_distance_sr_as_p(i2)/(k_boltz*temperature):Else:energies(1,2)=0:EndIf
     EndIf  
   Else
     energies(1,2)=0
@@ -2664,10 +2892,10 @@ Procedure set_interaction_energies()
   If j2<1000
     If sphere_diameter>rod_diameter 
       j2=newtons_method(@energy_vs_distance_rs_as_p(),j2)
-      energies_detach(1,2)=energy_vs_distance_rs_as_p(j2)/(k_boltz*temperature)
+      If Not IsNAN(j2):energies_detach(1,2)=energy_vs_distance_rs_as_p(j2)/(k_boltz*temperature):Else:energies_detach(1,2)=Infinity():EndIf
     Else
       j2=newtons_method(@energy_vs_distance_sr_as_p(),j2)
-      energies_detach(1,2)=energy_vs_distance_sr_as_p(j2)/(k_boltz*temperature)
+      If Not IsNAN(j2):energies_detach(1,2)=energy_vs_distance_sr_as_p(j2)/(k_boltz*temperature):Else:energies_detach(1,2)=Infinity():EndIf
     EndIf
   Else  
     energies_detach(1,2)=Infinity()
@@ -2679,12 +2907,12 @@ Procedure set_interaction_energies()
   EndIf
   energies_detach(2,1)=energies_detach(1,2)
   chances_detach(2,1)=chances_detach(1,2)
-  
+
   ;sphere plate
-  
+    
   If i3>0
     i3=newtons_method(@energy_vs_distance_sp(),i3)
-    energies(1,3)=energy_vs_distance_sp(i3)/(k_boltz*temperature)
+    If Not IsNAN(i3):energies(1,3)=energy_vs_distance_sp(i3)/(k_boltz*temperature):Else:energies(1,3)=0:EndIf
   Else
     energies(1,3)=0
   EndIf  
@@ -2697,7 +2925,7 @@ Procedure set_interaction_energies()
   chances(3,1)=chances(1,3)
   If j3<1000
     j3=newtons_method(@energy_vs_distance_sp(),j3)
-    energies_detach(1,3)=energy_vs_distance_sp(j3)/(k_boltz*temperature)
+    If Not IsNAN(j3):energies_detach(1,3)=energy_vs_distance_sp(j3)/(k_boltz*temperature):Else:energies_detach(1,3)=Infinity():EndIf
   Else  
     energies_detach(1,3)=Infinity()
   EndIf  
@@ -2708,12 +2936,12 @@ Procedure set_interaction_energies()
   EndIf  
   energies_detach(3,1)=energies_detach(1,3)
   chances_detach(3,1)=chances_detach(1,3)
-  
+    
   ;rod rod
   
   If i4>0
     i4=newtons_method(@energy_vs_distance_rr(),i4)
-    energies(2,2)=energy_vs_distance_rr(i4)/(k_boltz*temperature)
+    If Not IsNAN(i4):energies(2,2)=energy_vs_distance_rr(i4)/(k_boltz*temperature):Else:energies(2,2)=0:EndIf
   Else
     energies(2,2)=0
   EndIf  
@@ -2724,7 +2952,7 @@ Procedure set_interaction_energies()
   EndIf
   If j4<1000
     j4=newtons_method(@energy_vs_distance_rr(),j4)
-    energies_detach(2,2)=energy_vs_distance_rr(j4)/(k_boltz*temperature)
+    If Not IsNAN(j4):energies_detach(2,2)=energy_vs_distance_rr(j4)/(k_boltz*temperature):Else:energies_detach(2,2)=Infinity():EndIf
   Else  
     energies_detach(2,2)=Infinity()
   EndIf  
@@ -2733,12 +2961,12 @@ Procedure set_interaction_energies()
   Else
     chances_detach(2,2)=kappa(ionic_strength)*((rod_diameter+1)*dx)*Exp(-(energies(2,2)-energies_detach(2,2)))
   EndIf  
-  
+    
   ;rod plate
   
   If i5>0
     i5=newtons_method(@energy_vs_distance_rp(),i5)
-    energies(2,3)=energy_vs_distance_rp(i5)/(k_boltz*temperature)
+    If Not IsNAN(i5):energies(2,3)=energy_vs_distance_rp(i5)/(k_boltz*temperature):Else:energies(2,3)=0:EndIf
   Else
     energies(2,3)=0
   EndIf
@@ -2751,7 +2979,7 @@ Procedure set_interaction_energies()
   chances(3,2)=chances(2,3)
   If j5<1000
     j5=newtons_method(@energy_vs_distance_rp(),j5)
-    energies_detach(2,3)=energy_vs_distance_rp(j5)/(k_boltz*temperature)
+    If Not IsNAN(j5):energies_detach(2,3)=energy_vs_distance_rp(j5)/(k_boltz*temperature):Else:energies_detach(2,3)=Infinity():EndIf
   Else  
     energies_detach(2,3)=Infinity()
   EndIf  
@@ -2762,12 +2990,12 @@ Procedure set_interaction_energies()
   EndIf
   energies_detach(3,2)=energies_detach(2,3)
   chances_detach(3,2)=chances_detach(2,3)
-  
+
   ;plate plate
-  
+
   If i6>0
     i6=newtons_method(@energy_vs_distance_pp(),i6)
-    energies(3,3)=energy_vs_distance_pp(i6)/(k_boltz*temperature)
+    If Not IsNAN(i6):energies(3,3)=energy_vs_distance_pp(i6)/(k_boltz*temperature):Else:energies(3,3)=0:EndIf
   Else
     energies(3,3)=0
   EndIf
@@ -2778,7 +3006,7 @@ Procedure set_interaction_energies()
   EndIf
   If j6<1000
     j6=newtons_method(@energy_vs_distance_pp(),j6)
-    energies_detach(3,3)=energy_vs_distance_pp(j6)/(k_boltz*temperature)
+    If Not IsNAN(j6):energies_detach(3,3)=energy_vs_distance_pp(j6)/(k_boltz*temperature):Else:energies_detach(3,3)=Infinity():EndIf
   Else  
     energies_detach(3,3)=Infinity()
   EndIf  
@@ -2787,16 +3015,33 @@ Procedure set_interaction_energies()
   Else
     chances_detach(3,3)=kappa(ionic_strength)*((plate_thickness+1)*dx)*Exp(-(energies(3,3)-energies_detach(3,3)))
   EndIf
-  
+
   StartDrawing(ImageOutput(im_DLVO))
   FrontColor(RGB(0,0,0))
   BackColor(RGB(255,255,255))
   DrawText(1,1,"DLVO Total Interaction Energies")
   scalex.d=200/1000
   
-
+  
+  Debug max1
+  Debug max2
+  Debug max3
+  Debug max4
+  Debug max5
+  Debug max6
   max.d
-
+;   If energy_vs_distance_ss(i1)>max:max=energy_vs_distance_ss(i1):EndIf
+;   If sphere_diameter>rod_diameter 
+;     If energy_vs_distance_rs_as_p(i2)>max:max=energy_vs_distance_rs_as_p(i2):EndIf
+;   Else
+;     If energy_vs_distance_sr_as_p(i2)>max:max=energy_vs_distance_sr_as_p(i2):EndIf
+;   EndIf
+;   If energy_vs_distance_sp(i3)>max:max=energy_vs_distance_sp(i3):EndIf
+;   If energy_vs_distance_rr(i4)>max:max=energy_vs_distance_rr(i4):EndIf
+;   If energy_vs_distance_rp(i5)>max:max=energy_vs_distance_rp(i5):EndIf
+;   If energy_vs_distance_pp(i6)>max:max=energy_vs_distance_pp(i6):EndIf
+;  
+;   
   scaley.d
   LineXY(101,20,101,100,RGB(150,150,150))
   LineXY(101,100,301,100,RGB(150,150,150))
@@ -2818,47 +3063,58 @@ Procedure set_interaction_energies()
   If i5>0:LineXY(i5*scalex*Pow(10,11)+101,500,i5*scalex*Pow(10,11)+101,580,RGB(200,0,0)):EndIf
   If i6>0:LineXY(i6*scalex*Pow(10,11)+101,620,i6*scalex*Pow(10,11)+101,700,RGB(200,0,0)):EndIf
   
-  max=energy_vs_distance_ss(i1)/(k_boltz*temperature)
-  If IsNAN(max):max=0:EndIf
-  scaley=100/(max+10)
-  For i=1 To 999
-    If dlvo_sphere_sphere(i)>=-10 And dlvo_sphere_sphere(i)<max:LineXY(i*scalex+101,100-dlvo_sphere_sphere(i)*scaley,(i+1)*scalex+101,100-dlvo_sphere_sphere(i+1)*scaley,RGB(0,0,0)):EndIf
-  Next i
-  
-  If sphere_diameter>rod_diameter 
-    max=energy_vs_distance_rs_as_p(i2)/(k_boltz*temperature)
-  Else
-    max=energy_vs_distance_sr_as_p(i2)/(k_boltz*temperature)  
+  If Not IsNAN(i1)
+    max=energy_vs_distance_ss(i1)/(k_boltz*temperature)
+    scaley=100/(max+10)
+    For i=1 To 999
+      If dlvo_sphere_sphere(i)>=-10 And dlvo_sphere_sphere(i)<max:LineXY(i*scalex+101,100-dlvo_sphere_sphere(i)*scaley,(i+1)*scalex+101,100-dlvo_sphere_sphere(i+1)*scaley,RGB(0,0,0)):EndIf
+    Next i
   EndIf
-  scaley=100/(max+10)
   
-  For i=1 To 999
-    If dlvo_sphere_rod(i)>=-10 And dlvo_sphere_rod(i)<max:LineXY(i*scalex+101,220-dlvo_sphere_rod(i)*scaley,(i+1)*scalex+101,220-dlvo_sphere_rod(i+1)*scaley,RGB(0,0,0)):EndIf
-  Next i
+  If Not IsNAN(i2)
+    If sphere_diameter>rod_diameter 
+      max=energy_vs_distance_rs_as_p(i2)/(k_boltz*temperature)
+    Else
+      max=energy_vs_distance_sr_as_p(i2)/(k_boltz*temperature)  
+    EndIf
+    scaley=100/(max+10)
+   
+    For i=1 To 999
+      If dlvo_sphere_rod(i)>=-10 And dlvo_sphere_rod(i)<max:LineXY(i*scalex+101,220-dlvo_sphere_rod(i)*scaley,(i+1)*scalex+101,220-dlvo_sphere_rod(i+1)*scaley,RGB(0,0,0)):EndIf
+    Next i
+  EndIf
   
-  max=energy_vs_distance_sp(i3)/(k_boltz*temperature)
-  scaley=100/(max+10)
-  For i=1 To 999
-    If dlvo_sphere_plate(i)>=-10 And dlvo_sphere_plate(i)<max:LineXY(i*scalex+101,340-dlvo_sphere_plate(i)*scaley,(i+1)*scalex+101,340-dlvo_sphere_plate(i+1)*scaley,RGB(0,0,0)):EndIf
-  Next i
+  If Not IsNAN(i3)
+    max=energy_vs_distance_sp(i3)/(k_boltz*temperature)
+    scaley=100/(max+10)
+    For i=1 To 999
+      If dlvo_sphere_plate(i)>=-10 And dlvo_sphere_plate(i)<max:LineXY(i*scalex+101,340-dlvo_sphere_plate(i)*scaley,(i+1)*scalex+101,340-dlvo_sphere_plate(i+1)*scaley,RGB(0,0,0)):EndIf
+    Next i
+  EndIf
   
-  max=energy_vs_distance_rr(i4)/(k_boltz*temperature)
-  scaley=100/(max+10)
-  For i=1 To 999
-    If dlvo_rod_rod(i)>=-10 And dlvo_rod_rod(i)<max:LineXY(i*scalex+101,460-dlvo_rod_rod(i)*scaley,(i+1)*scalex+101,460-dlvo_rod_rod(i+1)*scaley,RGB(0,0,0)):EndIf
-  Next i
+  If Not IsNAN(i4)
+    max=energy_vs_distance_rr(i4)/(k_boltz*temperature)
+    scaley=100/(max+10)
+    For i=1 To 999
+      If dlvo_rod_rod(i)>=-10 And dlvo_rod_rod(i)<max:LineXY(i*scalex+101,460-dlvo_rod_rod(i)*scaley,(i+1)*scalex+101,460-dlvo_rod_rod(i+1)*scaley,RGB(0,0,0)):EndIf
+    Next i
+  EndIf
   
-  max=energy_vs_distance_rp(i5)/(k_boltz*temperature)
-  scaley=100/(max+10)
-  For i=1 To 999
-    If dlvo_rod_plate(i)>=-10 And dlvo_rod_plate(i)<max:LineXY(i*scalex+101,580-dlvo_rod_plate(i)*scaley,(i+1)*scalex+101,580-dlvo_rod_plate(i+1)*scaley,RGB(0,0,0)):EndIf
-  Next i
+  If Not IsNAN(i5)
+    max=energy_vs_distance_rp(i5)/(k_boltz*temperature)
+    scaley=100/(max+10)
+    For i=1 To 999
+      If dlvo_rod_plate(i)>=-10 And dlvo_rod_plate(i)<max:LineXY(i*scalex+101,580-dlvo_rod_plate(i)*scaley,(i+1)*scalex+101,580-dlvo_rod_plate(i+1)*scaley,RGB(0,0,0)):EndIf
+    Next i
+  EndIf
   
-  max=energy_vs_distance_pp(i6)/(k_boltz*temperature)
-  scaley=100/(max+10)
-  For i=1 To 999
-    If dlvo_plate_plate(i)>=-10 And dlvo_plate_plate(i)<max:LineXY(i*scalex+101,700-dlvo_plate_plate(i)*scaley,(i+1)*scalex+101,700-dlvo_plate_plate(i+1)*scaley,RGB(0,0,0)):EndIf
-  Next i
+  If Not IsNAN(i6)
+    max=energy_vs_distance_pp(i6)/(k_boltz*temperature)
+    scaley=100/(max+10)
+    For i=1 To 999
+      If dlvo_plate_plate(i)>=-10 And dlvo_plate_plate(i)<max:LineXY(i*scalex+101,700-dlvo_plate_plate(i)*scaley,(i+1)*scalex+101,700-dlvo_plate_plate(i+1)*scaley,RGB(0,0,0)):EndIf
+    Next i
+  EndIf
   
   DrawText(1,80,"Sphere/Sphere")
   DrawText(1,200,"Sphere/Rod")
@@ -2875,8 +3131,54 @@ Procedure set_interaction_energies()
   DrawText(151,680,StrD(energies(3,3),2)+" k_B*T; Lg(a)="+StrD(Log10(chances(3,3)),2)+" Lg(b)="+StrD(Log10(chances_detach(3,3)),2))
   
   
+;   Dim results.d(100,100)
+;   ionic_strength=0.01
+;   temp.d=0
+;         step_i.d=Pow(100,1/100)
+;         i0.d=Pow(10,-21)       
+;         step_p.d=30/100000
+;   For i=0 To 100
+;             
+;     p0.d=0
+;     sphere_hamaker=i0*Pow(step_i,i)
+; ;ionic_strength=i0*Pow(step_i,i)
+;       
+;     For j=0 To 100
+; 
+;       
+;       sphere_zetapot=p0+j*step_p
+;       max1=0
+;      
+;       For k=1 To 1000 
+;     If max1<energy_vs_distance_ss(k*Pow(10,-10)):max1=energy_vs_distance_ss(k*Pow(10,-10)):temp=k*Pow(10,-10):EndIf
+;     Next k
+;       
+;       temp=newtons_method(@energy_vs_distance_ss(),temp)  
+;       If energy_vs_distance_ss(temp)/(k_boltz*temperature)<0 Or energy_vs_distance_ss(temp)/(k_boltz*temperature)>Pow(10,6) 
+;         results(i,j)=0
+;         Else
+;       results(i,j)=energy_vs_distance_ss(temp)/(k_boltz*temperature)
+;     EndIf  
+;     Next j
+;   Next i  
+;   
+;   CreateFile(0,"sens_out.txt")
+;   For i=0 To 100
+;     s.s=""
+;     For j=0 To 100
+;       If j<100
+;         s+StrD(results(i,j))+Chr(9)
+;       Else
+;         s+StrD(results(i,j))
+;       EndIf  
+;       
+;     Next j  
+;   WriteStringN(0,s)  
+;   Next i  
+;   CloseFile(0)
+;  End
   StopDrawing()
-  
+
 EndProcedure  
 
 Procedure.l color(type.i)
@@ -2904,6 +3206,8 @@ Procedure draw()
   drawstuff=1
   
   nr_particles.i=0
+  meanfreepath.d=0
+  meanlifetime.d=0
   
   If drawstuff
     If mode=1
@@ -2935,14 +3239,16 @@ Procedure draw()
               gray2/2
               gray3/2
             EndIf
-            ;             If Not mode=2 And i=0
-            ;               gray1=255:gray2=0:gray3=0
-            ;             EndIf  
-            ; If i=0:gray1=255:gray2=0:gray3=0:EndIf
+;             If Not mode=2 And i=0
+;               gray1=255:gray2=0:gray3=0
+;             EndIf  
+           ; If i=0:gray1=255:gray2=0:gray3=0:EndIf
             Plot(100+scale_x*clusters(i)\particles(j)\points(k)\x+scale_z*clusters(i)\particles(j)\points(k)\z,100+scale_z*nz+scale_y*(ny-clusters(i)\particles(j)\points(k)\y)-scale_z*clusters(i)\particles(j)\points(k)\z,RGB(gray1,gray2,gray3))
             ;Plot(100+clusters()\particles()\points()\x,100+ny-clusters()\particles()\points()\y,RGB(gray,gray,gray))
           Next
         Next
+          meanlifetime+clusters(i)\lifetime
+          meanfreepath+clusters(i)\freepath
       Next   
     EndIf
   EndIf
@@ -2951,23 +3257,23 @@ Procedure draw()
   ;       Next k:Next j:Next i
   StopDrawing()
   
-  ;   Static nr.i
-  ;   
-  ;     CreateDirectory(GetCurrentDirectory()+"moviee")
-  ;     SaveImage(im_aggregate,GetCurrentDirectory()+"moviee\"+Str(nr)+".png", #PB_ImagePlugin_PNG )
-  ;   nr+1
-  
+;   Static nr.i
+;   
+;     CreateDirectory(GetCurrentDirectory()+"moviee")
+;     SaveImage(im_aggregate,GetCurrentDirectory()+"moviee\"+Str(nr)+".png", #PB_ImagePlugin_PNG )
+;   nr+1
+ 
   StartDrawing(SpriteOutput(sprite))
-  FrontColor(RGB(0,0,0))
-  BackColor(RGB(255,255,255))
-  Box(0,0,800+sizex,700+sizey,RGB(255,255,255))
+   FrontColor(RGB(0,0,0))
+   BackColor(RGB(255,255,255))
+   Box(0,0,800+sizex,700+sizey,RGB(255,255,255))
   DrawImage(ImageID(im_aggregate),100,100)
-  
+
   If show_dlvo:DrawImage(ImageID(im_DLVO),sizex+350,1):EndIf
   If allow_attach:DrawText(10,10,"Attachment allowed"):EndIf
-  
-  If sediment:DrawText(10,30,"Sedimentation allowed"):EndIf
-  If allow_rotate:DrawText(10,50,"Rotation allowed"):EndIf
+  If allow_detach:DrawText(10,30,"Detachment allowed"):EndIf
+  If sediment:DrawText(10,50,"Sedimentation allowed"):EndIf
+  If allow_rotate:DrawText(10,70,"Rotation allowed"):EndIf
   
   DrawText(10,90,"press '3' to enter static 3D mode")
   DrawText(10,110,"press '4' to enter dynamic 3D mode")
@@ -2988,6 +3294,8 @@ Procedure draw()
   DrawText(20,140+sizey,"calculation time: "+Str(elapsedtime)+" ms")
   DrawText(20,160+sizey,"largest cluster ("+Str(nr_largest_cluster)+"): "+Str(largest_cluster))
   DrawText(20,180+sizey,"solid volume fraction: "+StrD(total_mass/((nx+1)*(ny+1)*(nz+1))))
+  DrawText(20,200+sizey,"mean free path: "+StrD(meanfreepath/nr_clusters_init))
+  DrawText(20,220+sizey,"mean lifetime: "+StrD(meanlifetime/nr_clusters_init))
   DrawText(20,250+sizey,"mass distribution")
   DrawText(20,370+sizey,"gyration distribution")
   DrawText(20,490+sizey,"fractal dim. distribution")
@@ -3012,7 +3320,7 @@ Procedure draw()
   For i=1 To 200;n_timeseries
     i1=Round((i-1)*n_timeseries/200,#PB_Round_Nearest)
     i2=Round(i*n_timeseries/200,#PB_Round_Nearest)
-    LineXY(200+i-1,300+sizey-timeseries(i1)\mass*scaley,200+i,300+sizey-timeseries(i2)\mass*scaley,RGB(200,100,100))
+   LineXY(200+i-1,300+sizey-timeseries(i1)\mass*scaley,200+i,300+sizey-timeseries(i2)\mass*scaley,RGB(200,100,100))
   Next i 
   
   
@@ -3034,7 +3342,7 @@ Procedure draw()
   For i=1 To 200;n_timeseries
     i1=Round((i-1)*n_timeseries/200,#PB_Round_Nearest)
     i2=Round(i*n_timeseries/200,#PB_Round_Nearest)
-    LineXY(200+i-1,420+sizey-timeseries(i1)\gyration*scaley,200+i,420+sizey-timeseries(i2)\gyration*scaley,RGB(200,100,100))
+   LineXY(200+i-1,420+sizey-timeseries(i1)\gyration*scaley,200+i,420+sizey-timeseries(i2)\gyration*scaley,RGB(200,100,100))
   Next i   
   
   temp=0
@@ -3047,7 +3355,7 @@ Procedure draw()
   EndIf
   DrawText(200,540+sizey,StrD(fractal_dims(0)\class,3))
   DrawText(400,540+sizey,StrD(fractal_dims(ArraySize(fractal_dims()))\class,3))
-  
+
   For i=0 To ArraySize(fractal_dims())
     Box(200+(fractal_dims(i)\class-fractal_dims(0)\class)*scalex,540+sizey,2,-fractal_dims(i)\amount*scaley,RGB(0,0,0))
     ;LineXY(200+masses(i)\class*scalex,300+nx+0.2*nz-masses(i)\amount*masses(i)\class*scaley,200+masses(i+1)\class*scalex,300+nx+0.2*nz-masses(i+1)\amount*masses(i+1)\class*scaley,RGB(0,0,0))    
@@ -3057,60 +3365,56 @@ Procedure draw()
   For i=1 To 200;n_timeseries
     i1=Round((i-1)*n_timeseries/200,#PB_Round_Nearest)
     i2=Round(i*n_timeseries/200,#PB_Round_Nearest)
-    LineXY(200+i-1,540+sizey-timeseries(i1)\fractal*scaley,200+i,540+sizey-timeseries(i2)\fractal*scaley,RGB(200,100,100))
-  Next i 
+   LineXY(200+i-1,540+sizey-timeseries(i1)\fractal*scaley,200+i,540+sizey-timeseries(i2)\fractal*scaley,RGB(200,100,100))
+ Next i 
+ 
+ If Not show_dlvo
+   
+   sum.i=timeseries(n_timeseries)\attach_type(0)+timeseries(n_timeseries)\attach_type(1)+timeseries(n_timeseries)\attach_type(2) ;total bonds
+   DrawText(sizex+250,20,"bond spheres-spheres: "+StrD(timeseries(n_timeseries)\attach_minerals(0)/sum))
+   DrawText(sizex+250,40,"bond spheres-rods: "+StrD(timeseries(n_timeseries)\attach_minerals(1)/sum))
+   DrawText(sizex+250,60,"bond spheres-plates: "+StrD(timeseries(n_timeseries)\attach_minerals(2)/sum))
+   DrawText(sizex+250,80,"bond rods-rods: "+StrD(timeseries(n_timeseries)\attach_minerals(3)/sum))
+   DrawText(sizex+250,100,"bond rods-plates: "+StrD(timeseries(n_timeseries)\attach_minerals(4)/sum))
+   DrawText(sizex+250,120,"bond plates-plates: "+StrD(timeseries(n_timeseries)\attach_minerals(5)/sum))   
   
-  If Not show_dlvo
-    
-    sum.i=timeseries(n_timeseries)\attach_type(0)+timeseries(n_timeseries)\attach_type(1)+timeseries(n_timeseries)\attach_type(2) ;total bonds
-    DrawText(sizex+250,20,"bond spheres-spheres: "+StrD(timeseries(n_timeseries)\attach_minerals(0)/sum))
-    DrawText(sizex+250,40,"bond spheres-rods: "+StrD(timeseries(n_timeseries)\attach_minerals(1)/sum))
-    DrawText(sizex+250,60,"bond spheres-plates: "+StrD(timeseries(n_timeseries)\attach_minerals(2)/sum))
-    DrawText(sizex+250,80,"bond rods-rods: "+StrD(timeseries(n_timeseries)\attach_minerals(3)/sum))
-    DrawText(sizex+250,100,"bond rods-plates: "+StrD(timeseries(n_timeseries)\attach_minerals(4)/sum))
-    DrawText(sizex+250,120,"bond plates-plates: "+StrD(timeseries(n_timeseries)\attach_minerals(5)/sum))   
-    
-    For j=0 To ny   
-      If max1<profiles(1,j):max1=profiles(1,j):EndIf
-      If max2<profiles(2,j):max2=profiles(2,j):EndIf
-      If max3<profiles(3,j):max3=profiles(3,j):EndIf  
-    Next j
-    
-    If max1=0:max1=1:EndIf
-    If max2=0:max2=1:EndIf
-    If max3=0:max3=1:EndIf
-    
-    If plate_nr>0
-      For j=1 To ny
-        LineXY(sizex+450+profiles(3,j-1)*100/max3,(ny-j+1)*scale_y+scale_z*nz+200,sizex+450+profiles(3,j)*100/max3,(ny-j)*scale_y+scale_z*nz+200,RGB(0,0,150))
-      Next j 
-    EndIf
-    If sphere_nr>0
-      For j=1 To ny
-        LineXY(sizex+250+profiles(1,j-1)*100/max1,(ny-j+1)*scale_y+scale_z*nz+200,sizex+250+profiles(1,j)*100/max1,(ny-j)*scale_y+scale_z*nz+200)   
-      Next j 
-    EndIf
-    If rod_nr>0
-      For j=1 To ny  
-        LineXY(sizex+350+profiles(2,j-1)*100/max2,(ny-j+1)*scale_y+scale_z*nz+200,sizex+350+profiles(2,j)*100/max2,(ny-j)*scale_y+scale_z*nz+200,RGB(150,0,0))
-      Next j 
-    EndIf
-    
-    
-    DrawText(sizex+250,ny*scale_y+scale_z*nz+200,StrD(timeseries(n_timeseries)\meanz_spheres,0)+"+-"+StrD(timeseries(n_timeseries)\sdz_spheres,0))
-    DrawText(sizex+350,ny*scale_y+scale_z*nz+200,StrD(timeseries(n_timeseries)\meanz_rods,0)+"+-"+StrD(timeseries(n_timeseries)\sdz_rods,0))
-    DrawText(sizex+450,ny*scale_y+scale_z*nz+200,StrD(timeseries(n_timeseries)\meanz_plates,0)+"+-"+StrD(timeseries(n_timeseries)\sdz_plates,0))
-    
-    DrawText(sizex+250,ny*scale_y+scale_z*nz+240,"corr_spheres/rods: "+StrD(timeseries(n_timeseries)\corr_sphererod))
-    DrawText(sizex+250,ny*scale_y+scale_z*nz+260,"corr_spheres/plates: "+StrD(timeseries(n_timeseries)\corr_sphereplate))
-    DrawText(sizex+250,ny*scale_y+scale_z*nz+280,"corr_rods/plates: "+StrD(timeseries(n_timeseries)\corr_rodplate))
-    
-  EndIf
+ For j=0 To ny   
+   If max1<profiles(1,j):max1=profiles(1,j):EndIf
+   If max2<profiles(2,j):max2=profiles(2,j):EndIf
+   If max3<profiles(3,j):max3=profiles(3,j):EndIf  
+ Next j
+ 
+ If plate_nr>0
+ For j=1 To ny
+   LineXY(sizex+450+profiles(3,j-1)*100/max3,(ny-j+1)*scale_y+scale_z*nz+200,sizex+450+profiles(3,j)*100/max3,(ny-j)*scale_y+scale_z*nz+200,RGB(0,0,150))
+ Next j 
+ EndIf
+ If sphere_nr>0
+ For j=1 To ny
+   LineXY(sizex+250+profiles(1,j-1)*100/max1,(ny-j+1)*scale_y+scale_z*nz+200,sizex+250+profiles(1,j)*100/max1,(ny-j)*scale_y+scale_z*nz+200)   
+ Next j 
+ EndIf
+ If rod_nr>0
+ For j=1 To ny  
+   LineXY(sizex+350+profiles(2,j-1)*100/max2,(ny-j+1)*scale_y+scale_z*nz+200,sizex+350+profiles(2,j)*100/max2,(ny-j)*scale_y+scale_z*nz+200,RGB(150,0,0))
+ Next j 
+ EndIf
+
+ 
+ DrawText(sizex+250,ny*scale_y+scale_z*nz+200,StrD(timeseries(n_timeseries)\meanz_spheres,0)+"+-"+StrD(timeseries(n_timeseries)\sdz_spheres,0))
+ DrawText(sizex+350,ny*scale_y+scale_z*nz+200,StrD(timeseries(n_timeseries)\meanz_rods,0)+"+-"+StrD(timeseries(n_timeseries)\sdz_rods,0))
+  DrawText(sizex+450,ny*scale_y+scale_z*nz+200,StrD(timeseries(n_timeseries)\meanz_plates,0)+"+-"+StrD(timeseries(n_timeseries)\sdz_plates,0))
+   
+   DrawText(sizex+250,ny*scale_y+scale_z*nz+240,"corr_spheres/rods: "+StrD(timeseries(n_timeseries)\corr_sphererod))
+   DrawText(sizex+250,ny*scale_y+scale_z*nz+260,"corr_spheres/plates: "+StrD(timeseries(n_timeseries)\corr_sphereplate))
+   DrawText(sizex+250,ny*scale_y+scale_z*nz+280,"corr_rods/plates: "+StrD(timeseries(n_timeseries)\corr_rodplate))
+  
+ EndIf
   StopDrawing()
-  
+ 
   ;ClipSprite(sprite,0,0,1000,1000)
   RenderWorld()
-  DisplaySprite(sprite,0,0)
+ DisplaySprite(sprite,0,0)
   FlipBuffers()
   
 EndProcedure  
@@ -3147,11 +3451,20 @@ Procedure open_parameters_window()
   ionic_strength=ReadPreferenceDouble("DLA_ionic_strength",0.001)
   dx=ReadPreferenceDouble("DLA_dx",0.0000001)  
   sediment=ReadPreferenceInteger("DLA_sediment",0)
+  allow_detach=ReadPreferenceInteger("DLA_detach",0)
   allow_attach=ReadPreferenceInteger("DLA_attach",0)
   allow_rotate=ReadPreferenceInteger("DLA_rotate",0)
+  sigma=ReadPreferenceDouble("DLA_sigma",5E-10)
   termination_crit=ReadPreferenceDouble("DLA_crit",0)
   termination_type=ReadPreferenceInteger("DLA_crit_type",1)
-  
+  camx=ReadPreferenceDouble("DLA_camx",-435.44)
+  camy=ReadPreferenceDouble("DLA_camy",197.37)
+  camz=ReadPreferenceDouble("DLA_camz",-437.23)
+  dircamx=ReadPreferenceDouble("DLA_dircamx",0.63)
+  dircamy=ReadPreferenceDouble("DLA_dircamy",0.06)
+  dircamz=ReadPreferenceDouble("DLA_dircamz",0.77)
+  camfov=ReadPreferenceDouble("DLA_camfov",50)
+
   ClosePreferences()
   
   OpenWindow(#Win_Para,10,10,600,600,"Parameters")
@@ -3184,6 +3497,8 @@ Procedure open_parameters_window()
   SetGadgetState(#Checkbox_rotate,allow_rotate)    
   CheckBoxGadget(#Checkbox_attach,430,30,110,20,"allow attachment")
   SetGadgetState(#Checkbox_attach,allow_attach)  
+  CheckBoxGadget(#Checkbox_detach,430,50,110,20,"allow detachment")
+  SetGadgetState(#Checkbox_detach,allow_detach)
   CheckBoxGadget(#Checkbox_sediment,430,70,110,20,"allow sedimentation")
   SetGadgetState(#Checkbox_sediment,sediment)
   
@@ -3244,6 +3559,8 @@ Procedure open_parameters_window()
   StringGadget(#String_ionic_strength,130,400,80,20,StrD(ionic_strength*1000))
   TextGadget(#Text_Temperature,30,420,100,20,"Temperature [K]")
   StringGadget(#String_Temperature,130,420,80,20,StrD(temperature))
+  TextGadget(#Text_sigma,30,440,100,20,"coll. diameter [nm]")
+  StringGadget(#String_sigma,130,440,80,20,StrD(sigma*Pow(10,9)))
   
   OptionGadget(#Radio_uncontrained,340,280,100,20,"unconstrained")
   OptionGadget(#Radio_mass,340,300,100,20,"mass")
@@ -3288,8 +3605,10 @@ Procedure open_parameters_window()
   ionic_strength=ValD(GetGadgetText(#String_ionic_strength))/1000
   temperature=ValD(GetGadgetText(#String_Temperature))
   sediment=GetGadgetState(#Checkbox_sediment)
+  allow_detach=GetGadgetState(#Checkbox_detach)
   allow_attach=GetGadgetState(#Checkbox_attach)
   allow_rotate=GetGadgetState(#Checkbox_rotate)
+  sigma=ValD(GetGadgetText(#String_sigma))*Pow(10,-9)
   termination_type=1*GetGadgetState(#Radio_uncontrained)+2*GetGadgetState(#Radio_mass)+3*GetGadgetState(#Radio_gyration)+4*GetGadgetState(#Radio_time)+5*GetGadgetState(#Radio_nr)
   termination_crit=ValD(GetGadgetText(#String_crit))
   
@@ -3327,6 +3646,7 @@ Procedure open_parameters_window()
   WritePreferenceInteger("DLA_detach",allow_detach)
   WritePreferenceInteger("DLA_attach",allow_attach)
   WritePreferenceInteger("DLA_rotate",allow_rotate)
+  WritePreferenceDouble("DLA_sigma",sigma)
   WritePreferenceDouble("DLA_crit",termination_crit)
   WritePreferenceInteger("DLA_crit_type",termination_type)
   
@@ -3355,26 +3675,26 @@ Procedure.i check_termination()
       If nr_clusters<=termination_crit-1:ProcedureReturn 1:EndIf
     Default
       ProcedureReturn 0
-  EndSelect   
+   EndSelect   
   
 EndProcedure  
 
 Procedure count_attach_type(a.i,b.i)
   
-  If clusters(a)\nr_particles=1
-    If clusters(b)\nr_particles=1
-      n_monomono+1
-    Else
-      n_monopoly+1
-    EndIf
-  Else
-    If clusters(b)\nr_particles=1
-      n_monopoly+1
-    Else
-      n_polypoly+1
-    EndIf         
-  EndIf
-  
+         If clusters(a)\nr_particles=1
+         If clusters(b)\nr_particles=1
+           n_monomono+1
+         Else
+           n_monopoly+1
+         EndIf
+       Else
+         If clusters(b)\nr_particles=1
+           n_monopoly+1
+         Else
+           n_polypoly+1
+         EndIf         
+       EndIf
+       
 EndProcedure  
 
 Procedure aggregate_3d(mode.l)
@@ -3406,12 +3726,12 @@ Procedure aggregate_3d(mode.l)
   ;Parse3DScripts()
   
   
-  If mode=2
-    CloseWindow(#Win_plot)
-    If Not Screen3DRequester():End:EndIf
-  EndIf
+;   If mode=2
+;     CloseWindow(#Win_plot)
+;     If Not Screen3DRequester():End:EndIf
+;   EndIf
   WorldShadows(3)
-  stats3.i=CreateSprite(#PB_Any,800,40)
+  stats3.i=CreateSprite(#PB_Any,deskwidth,40)
   AmbientColor(0)
   
   
@@ -3488,6 +3808,7 @@ Procedure aggregate_3d(mode.l)
   EntityRenderMode(ground_e, #PB_Entity_CastShadow)
   
   FreeStaticGeometry(geometry)
+
   ; Create Static geometry
   geometry=CreateStaticGeometry(#PB_Any, nx, ny, nz, #True)
   
@@ -3530,6 +3851,9 @@ Procedure aggregate_3d(mode.l)
   EndIf 
   ; Build the static geometry
   AddStaticGeometryEntity(geometry,EntityID(ground_e),nx/2,-1,nz/2,nx,1,nz)
+  
+;   AddStaticGeometryEntity(geometry,EntityID(ground_e),-1,ny/2,nz/2,1,ny,nz)
+;    AddStaticGeometryEntity(geometry,EntityID(ground_e),nx/2,ny/2,nz+1,nx,ny,1)
   
   BuildStaticGeometry(geometry)
   
@@ -3586,7 +3910,8 @@ Procedure aggregate_3d(mode.l)
       StartDrawing(SpriteOutput(stats3))
       ;Box(SpriteWidth(sprit)
       DrawText(1,1,"Shadow: "+Str(shadows)+ " FOV: "+Str(fov)+ " Camera: x:"+StrD(CameraX(camera),2)+" y:"+StrD(CameraY(camera),2)+" z:"+StrD(CameraZ(camera),2)+" pitch:"+StrD(CameraDirectionX(camera),2)+" yaw:"+StrD(CameraDirectionY(camera),2)+" roll:"+StrD(CameraDirectionZ(camera),2))
-      DrawText(1,21," Esc:return  WASD:Controls  hold Space:Move light soruce  L:select light/shadow mode  +/-:change FOV  P:take screenshot")
+      DrawText(1,21," Esc:return  WASD:Controls  hold Space:Move light soruce  L:select light/shadow mode  +/-:change FOV  P:take screenshot  T:restore camera position  G:save camera position")
+
       StopDrawing()
     EndIf
     RenderWorld()
@@ -3603,11 +3928,7 @@ Procedure aggregate_3d(mode.l)
       CameraFOV(camera,fov)
     EndIf  
     
-    
-    
-    If KeyboardPushed(#PB_Key_P)
-      
-      
+    If KeyboardReleased(#PB_Key_P)
       hImage = CreateImage(#PB_Any,deskwidth,deskheight,32)
       If hImage
         hDC = StartDrawing(ImageOutput(hImage))
@@ -3624,6 +3945,32 @@ Procedure aggregate_3d(mode.l)
       
     EndIf  
     
+      If KeyboardReleased(#PB_Key_T)
+        fov=camfov
+        CameraFOV(camera,camfov)
+        MoveCamera(camera,camx,camy,camz,#PB_Absolute )
+        CameraDirection(camera,dircamx,dircamy,dircamz)
+      EndIf  
+      
+     If KeyboardReleased(#PB_Key_G)
+        camfov=fov
+        camx=CameraX(camera)
+        camy=CameraY(camera)
+        camz=CameraZ(camera)
+        dircamx=CameraDirectionX(camera)
+        dircamy=CameraDirectionY(camera)
+        dircamz=CameraDirectionZ(camera) 
+        OpenPreferences(GetCurrentDirectory()+"init.dat")
+        WritePreferenceDouble("DLA_camx", camx)
+        WritePreferenceDouble("DLA_camy",camy)
+        WritePreferenceDouble("DLA_camz",camz)
+        WritePreferenceDouble("DLA_dircamx",dircamx)
+        WritePreferenceDouble("DLA_dircamy",dircamy)
+        WritePreferenceDouble("DLA_dircamz",dircamz)
+        WritePreferenceDouble("DLA_camfov",camfov)
+        ClosePreferences()
+     EndIf   
+    
   Until KeyboardReleased(#PB_Key_Escape)
   FreeStaticGeometry(geometry)
 
@@ -3636,9 +3983,8 @@ Procedure aggregate_3d(mode.l)
   
   ReleaseMouse(1)
 
-  
+    
 EndProcedure  
-
 
 InitEngine3D()
 InitSprite()
@@ -3656,8 +4002,6 @@ im_DLVO=CreateImage(#PB_Any,400,900,32,RGB(255,255,255))
 set_mineral_shapes()
 set_interaction_energies()
 
-
-
 ;get_histograms()
 
 OpenWindow(#Win_Plot,10,10,deskwidth,deskheight,"Welcome to Aggregation Modeling")
@@ -3667,16 +4011,15 @@ OpenWindow(#Win_Plot,10,10,deskwidth,deskheight,"Welcome to Aggregation Modeling
 AntialiasingMode(#PB_AntialiasingMode_x6)
 OpenWindowedScreen(WindowID(#Win_Plot),0,0,deskwidth,deskheight,0,0,0)
 sprite=CreateSprite(#PB_Any,deskwidth,deskheight)
-stats=CreateSprite(#PB_Any,800,40)
+;stats=CreateSprite(#PB_Any,deskwidth,40)
 ;import_sprite=LoadSprite(#PB_Any, #PB_Compiler_Home + "examples/sources/Data/PureBasicLogo.bmp")
 
 fov.d
 Define.f KeyX, KeyY, MouseX, MouseY
 Define nodex.f, nodez.f, Boost.f = 1, Yaw.f, Pitch.f
 
-
 fov=70
-stats.i=CreateSprite(#PB_Any,800,40)
+stats.i=CreateSprite(#PB_Any,deskwidth,40)
 
 WorldShadows(3)
 
@@ -3769,60 +4112,89 @@ init_field()
 
 FreeMaterial(#PB_All)
 
-
-
-
 attach.attach_info
 get_histograms()
 If mode=1
-  calculate_fractals=0
-  calculate_gyration=0
-Else
-  calculate_fractals=1
-  calculate_gyration=1
-EndIf
-
-
+    calculate_fractals=0
+    calculate_gyration=0
+  Else
+      calculate_fractals=1
+      calculate_gyration=1
+      EndIf
 Repeat  
   event=WindowEvent()
   ExamineKeyboard()
   
-  ; If KeyboardPushed(#PB_Key_F):calculate_fractals=1:EndIf
-  
+ ; If KeyboardPushed(#PB_Key_F):calculate_fractals=1:EndIf
+
   elapsedtime=ElapsedMilliseconds()
   changed=0
   
-  max.d=Pow(10,-30)
+  max.d=0
   For i=0 To nr_clusters
     If clusters(i)\diff>max:max=clusters(i)\diff:EndIf
   Next i
   timestepdiff.d=2/9*dx*dx/max
-  
+
   If sediment
-    max.d=Pow(10,-30)
-    For i=0 To nr_clusters
-      If clusters(i)\hydrodyn>max And clusters(i)\miny>0:max=clusters(i)\hydrodyn:EndIf
-    Next i  
-    timestepsedi.d=dx/(2/9*max*max*9.81*1650000)
-  Else
-    timestepsedi=Pow(10,30)
+  max.d=0
+  For i=0 To nr_clusters
+    temp.d=1650000*9.81*dx*dx*dx*clusters(i)\mass/(6*#PI*clusters(i)\hydrodyn)
+    If temp>max And clusters(i)\miny>0:max=temp:EndIf
+  Next i  
+  timestepsedi.d=dx/temp
+Else
+  timestepsedi.d=Pow(10,30)
   EndIf
-  If timestepdiff<timestepsedi
+  If timestepdiff<timestepsedi    
     timestep=timestepdiff    
-  Else    
+  Else
     timestep=timestepsedi    
   EndIf  
   
   
+  ;       Debug "--_"
+  ;       Debug min
+        
   i=-1
   Repeat
     
     i+1
     
+    If allow_detach
+      j=-1
+      Repeat 
+        j+1      
+        ForEach clusters(i)\particles(j)\attached_to()
+          If random_cont(1,18)<=chances_detach(clusters(i)\particles(j)\id,clusters(i)\particles(clusters(i)\particles(j)\attached_to())\id)
+            pass=clusters(i)\particles(j)\attached_to()
+            DeleteElement(clusters(i)\particles(j)\attached_to())
+            detach(i,pass)     
+            
+            For k=0 To ArraySize(clusters(nr_clusters)\particles())
+              For l=0 To ArraySize(clusters(nr_clusters)\particles(k)\points())
+                field_info(clusters(nr_clusters)\particles(k)\points(l)\x,clusters(nr_clusters)\particles(k)\points(l)\y,clusters(nr_clusters)\particles(k)\points(l)\z)\cluster=nr_clusters+1
+                field_info(clusters(nr_clusters)\particles(k)\points(l)\x,clusters(nr_clusters)\particles(k)\points(l)\y,clusters(nr_clusters)\particles(k)\points(l)\z)\particle=k+1
+              Next l
+            Next k
+            
+            For k=0 To ArraySize(clusters(i)\particles())
+              For l=0 To ArraySize(clusters(i)\particles(k)\points())
+                field_info(clusters(i)\particles(k)\points(l)\x,clusters(i)\particles(k)\points(l)\y,clusters(i)\particles(k)\points(l)\z)\particle=k+1
+              Next l
+            Next k
+            
+          EndIf
+          ;check if the particle still exists in that cluster; shouldnt be happening??
+          If j>ArraySize(clusters(i)\particles()):Break(1):EndIf
+        Next 
+      Until j>=ArraySize(clusters(i)\particles())-1
+      
+    EndIf  
     
     If i=0 And (mode=1 Or mode=3):Continue:EndIf
     If random_cont(1,6)<=timestep/(2/9*dx*dx/clusters(i)\diff)  ;roll if it moves due to diff-coeff
-                                                                ;CopyStructure(@clusters(i),@movetemp,cluster)
+                                               ;CopyStructure(@clusters(i),@movetemp,cluster)
       For j=0 To ArraySize(clusters(i)\particles())
         For k=0 To ArraySize(clusters(i)\particles(j)\points())
           profiles(field(clusters(i)\particles(j)\points(k)\x,clusters(i)\particles(j)\points(k)\y,clusters(i)\particles(j)\points(k)\z),clusters(i)\particles(j)\points(k)\y)-1
@@ -3833,7 +4205,7 @@ Repeat
       Next j
       
       If allow_rotate:rotate_cluster(@clusters(i),Random(6)):EndIf
-      
+ 
       move_cluster(@clusters(i))
       
       For j=0 To ArraySize(clusters(i)\particles())
@@ -3846,7 +4218,7 @@ Repeat
       Next j
       
       If allow_attach:check_attachment(@clusters(i),i+1,@attach):EndIf
-      
+              
       If attach\attached_to_cluster
         attach\attached_to_cluster-1
         count_attach_type(i,attach\attached_to_cluster)
@@ -3854,8 +4226,11 @@ Repeat
           For k=0 To ArraySize(clusters(i)\particles(j)\points())
             field_info(clusters(i)\particles(j)\points(k)\x,clusters(i)\particles(j)\points(k)\y,clusters(i)\particles(j)\points(k)\z)\cluster=attach\attached_to_cluster+1
             field_info(clusters(i)\particles(j)\points(k)\x,clusters(i)\particles(j)\points(k)\y,clusters(i)\particles(j)\points(k)\z)\particle+clusters(attach\attached_to_cluster)\nr_particles
+           ; field_info(clusters(attach\attached_to_cluster)\particles(j)\points(k)\x,clusters(attach\attached_to_cluster)\particles(j)\points(k)\y,clusters(attach\attached_to_cluster)\particles(j)\points(k)\z)\cluster=i+1
+           ; field_info(clusters(attach\attached_to_cluster)\particles(j)\points(k)\x,clusters(attach\attached_to_cluster)\particles(j)\points(k)\y,clusters(attach\attached_to_cluster)\particles(j)\points(k)\z)\particle+clusters(i)\nr_particles  
           Next k  
         Next j
+       ; If i=attach\attached_to_cluster:CallDebugger:EndIf
         merge_clusters(attach\attached_to_cluster,i,attach\attached_to_particle,attach\attaching_part)
         
         If i>=nr_clusters:Break(1):EndIf
@@ -3863,7 +4238,19 @@ Repeat
       
     EndIf
     
-    If sediment And random_cont(1,6)<=timestep/(dx/(2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000))
+;     If 2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000*timestep/dx>=1
+;     tempd.d=2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000*timestep/dx  
+;     CallDebugger:EndIf
+ ;Debug 2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000*timestep/dx
+ ;Debug  clusters(i)\mass*dx*dx*dx*9.81*1650000/6/#PI/clusters(i)\hydrodyn*timestep/dx
+ ;   test.f = (2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000)/(clusters(i)\mass*dx*dx*dx*9.81*1650000/6/#PI/clusters(i)\hydrodyn)
+; If test>10 :Debug  (2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000)/(clusters(i)\mass*dx*dx*dx*9.81*1650000/6/#PI/clusters(i)\hydrodyn):EndIf
+    ;;Debug "---"
+    
+    ;If sediment And random_cont(1,6)<=timestep/(dx/(2/9*clusters(i)\hydrodyn*clusters(i)\hydrodyn*9.81*1650000))
+      If sediment And random_cont(1,6)<=timestep/(dx/(clusters(i)\mass*dx*dx*dx*9.81*1650000/6/#PI/clusters(i)\hydrodyn))
+      
+      
       For j=0 To ArraySize(clusters(i)\particles())
         For k=0 To ArraySize(clusters(i)\particles(j)\points())
           profiles(field(clusters(i)\particles(j)\points(k)\x,clusters(i)\particles(j)\points(k)\y,clusters(i)\particles(j)\points(k)\z),clusters(i)\particles(j)\points(k)\y)-1
@@ -3886,9 +4273,9 @@ Repeat
       
       If allow_attach:check_attachment(@clusters(i),i+1,@attach):EndIf
       ;Debug attach
-      If attach\attached_to_cluster
-        attach\attached_to_cluster-1
-        count_attach_type(i,attach\attached_to_cluster)  
+     If attach\attached_to_cluster
+       attach\attached_to_cluster-1
+       count_attach_type(i,attach\attached_to_cluster)  
         For j=0 To ArraySize(clusters(i)\particles())
           For k=0 To ArraySize(clusters(i)\particles(j)\points())
             field_info(clusters(i)\particles(j)\points(k)\x,clusters(i)\particles(j)\points(k)\y,clusters(i)\particles(j)\points(k)\z)\cluster=attach\attached_to_cluster+1
@@ -3910,7 +4297,8 @@ Repeat
   
   drawtimer+1
   If IsScreenActive()
-    If render
+    
+   If render
       Screen3DEvents()
       
       If ExamineMouse()
@@ -3956,7 +4344,7 @@ Repeat
       StartDrawing(SpriteOutput(stats))
       ;Box(SpriteWidth(sprit)
       DrawText(1,1,"Shadow: "+Str(shadows)+ " FOV: "+Str(fov)+ " Camera: x:"+StrD(CameraX(camera),2)+" y:"+StrD(CameraY(camera),2)+" z:"+StrD(CameraZ(camera),2)+" pitch:"+StrD(CameraDirectionX(camera),2)+" yaw:"+StrD(CameraDirectionY(camera),2)+" roll:"+StrD(CameraDirectionZ(camera),2))
-      DrawText(1,21," Esc:return  WASD:Controls  hold Space:Move light soruce  L:select light/shadow mode  +/-:change FOV  P:take screenshot")
+      DrawText(1,21," 4:return  WASD:Controls  hold Space:Move light soruce  L:select light/shadow mode  +/-:change FOV  P:take screenshot  T:restore camera position  G:save camera position")
       StopDrawing()
       
       RenderWorld()
@@ -3987,9 +4375,37 @@ Repeat
           EndIf
           StopDrawing()
         EndIf
-        SaveImage(hImage,"screencap.png",#PB_ImagePlugin_PNG )
-        
+        SaveImage(hImage,"screencap.png",#PB_ImagePlugin_PNG)        
       EndIf 
+      
+      If KeyboardReleased(#PB_Key_T)
+        fov=camfov
+        CameraFOV(camera,camfov)
+        MoveCamera(camera,camx,camy,camz,#PB_Absolute )
+        CameraDirection(camera,dircamx,dircamy,dircamz)
+      EndIf  
+      
+     If KeyboardReleased(#PB_Key_G)
+        camfov=fov
+        camx=CameraX(camera)
+        camy=CameraY(camera)
+        camz=CameraZ(camera)
+        dircamx=CameraDirectionX(camera)
+        dircamy=CameraDirectionY(camera)
+        dircamz=CameraDirectionZ(camera) 
+        OpenPreferences(GetCurrentDirectory()+"init.dat")
+        WritePreferenceDouble("DLA_camx", camx)
+        WritePreferenceDouble("DLA_camy",camy)
+        WritePreferenceDouble("DLA_camz",camz)
+        WritePreferenceDouble("DLA_dircamx",dircamx)
+        WritePreferenceDouble("DLA_dircamy",dircamy)
+        WritePreferenceDouble("DLA_dircamz",dircamz)
+        WritePreferenceDouble("DLA_camfov",camfov)
+        ClosePreferences()
+     EndIf  
+      
+
+      
     Else 
       If mode=0
         If changed:draw():EndIf
@@ -4021,6 +4437,15 @@ Repeat
     
   EndIf  
   
+;   If KeyboardPushed(#PB_Key_LeftControl) And KeyboardPushed(#PB_Key_E)
+;     CreateFile(0,"DLVO_curves.txt")
+;     WriteStringN(0,"sphere/sphere"+Chr(9)+"sphere/rod"+Chr(9)+"sphere/plate"+Chr(9)+"rod/rod"+Chr(9)+"rod/plate"+Chr(9)+"plate/plate")
+;     For i=0 To 1000
+;       WriteStringN(0,StrD(dlvo_sphere_sphere(i))+Chr(9)+StrD(dlvo_sphere_rod(i))+Chr(9)+StrD(dlvo_sphere_plate(i))+Chr(9)+StrD(dlvo_rod_rod(i))+Chr(9)+StrD(dlvo_rod_plate(i))+Chr(9)+StrD(dlvo_plate_plate(i)))
+;     Next i  
+;     CloseFile(0)
+;   EndIf  
+  
   If KeyboardPushed(#PB_Key_LeftControl) And KeyboardPushed(#PB_Key_C)
     End
   EndIf
@@ -4033,6 +4458,8 @@ Repeat
     BuildStaticGeometry(geometry)
 
   EndIf  
+  
+  
   
   If KeyboardPushed(#PB_Key_E)
     export_data("time_"+StrD(time))
@@ -4051,27 +4478,27 @@ Until Quit = 1
 
 export_data("final_time_"+StrD(time)) 
 
-If MessageRequester("Info","Export timeseries?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
-  
+ If MessageRequester("Info","Export timeseries?"+Chr(13)+Chr(10)+StrD(time),#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
+
   dir=ExamineDirectory(#PB_Any,GetCurrentDirectory()+"aggregateout","*.*")
   If Not IsDirectory(dir)
     CreateDirectory(GetCurrentDirectory()+"aggregateout")
   EndIf  
-  CreateFile(0,GetCurrentDirectory()+"aggregateout\timeseries.txt")
-  
-  WriteStringN(0,"time [s]"+Chr(9)+"#clusters"+Chr(9)+"mass [n_voxels]"+Chr(9)+"hydrodyn. radius [m]"+Chr(9)+"radius of gyration [m]"+Chr(9)+"fractal dimension [-]"+Chr(9)+"fraction free spheres"+Chr(9)+"fraction free rods"+Chr(9)+"fraction free plates"+Chr(9)+"n_attachments"+Chr(9)+"monomono"+Chr(9)+"monopoly"+Chr(9)+"polypoly"+Chr(9)+"mean_z_spheres"+Chr(9)+"sd_z_spheres"+Chr(9)+"mean_z_rods"+Chr(9)+"sd_z_rods"+Chr(9)+"mean_z_plates"+Chr(9)+"sd_z_plates"+Chr(9)+"corr_sphere_rod"+Chr(9)+"corr_sphere_plate"+Chr(9)+"corr_rod_plate"+Chr(9)+"bonds_sphere_sphere"+Chr(9)+"bonds_sphere_rod"+Chr(9)+"bonds_sphere_plate"+Chr(9)+"bonds_rod_rod"+Chr(9)+"bonds_rod_plate"+Chr(9)+"bonds_plate_plate")
-  For i=0 To n_timeseries
-    sum.i=timeseries(i)\attach_type(0)+timeseries(i)\attach_type(1)+timeseries(i)\attach_type(2)
-    WriteStringN(0,StrD(timeseries(i)\time)+Chr(9)+Str(timeseries(i)\nr_clus)+Chr(9)+StrD(timeseries(i)\mass)+Chr(9)+StrD(timeseries(i)\hydrodyn)+Chr(9)+StrD(timeseries(i)\gyration)+Chr(9)+StrD(timeseries(i)\fractal)+Chr(9)+StrD(timeseries(i)\freeparts(0))+Chr(9)+StrD(timeseries(i)\freeparts(1))+Chr(9)+StrD(timeseries(i)\freeparts(2))+Chr(9)+Str(sum)+Chr(9)+Str(timeseries(i)\attach_type(0))+Chr(9)+Str(timeseries(i)\attach_type(1))+Chr(9)+Str(timeseries(i)\attach_type(2))+Chr(9)+StrD(timeseries(i)\meanz_spheres)+Chr(9)+StrD(timeseries(i)\sdz_spheres)+Chr(9)+StrD(timeseries(i)\meanz_rods)+Chr(9)+StrD(timeseries(i)\sdz_rods)+Chr(9)+StrD(timeseries(i)\meanz_plates)+Chr(9)+StrD(timeseries(i)\sdz_plates)+Chr(9)+StrD(timeseries(i)\corr_sphererod)+Chr(9)+StrD(timeseries(i)\corr_sphereplate)+Chr(9)+StrD(timeseries(i)\corr_rodplate)+Chr(9)+Str(timeseries(i)\attach_minerals(0))+Chr(9)+Str(timeseries(i)\attach_minerals(1))+Chr(9)+Str(timeseries(i)\attach_minerals(2))+Chr(9)+Str(timeseries(i)\attach_minerals(3))+Chr(9)+Str(timeseries(i)\attach_minerals(4))+Chr(9)+Str(timeseries(i)\attach_minerals(5)))
-  Next i  
-  CloseFile(0)
+CreateFile(0,GetCurrentDirectory()+"aggregateout\timeseries.txt")
+
+WriteStringN(0,"time [s]"+Chr(9)+"#clusters"+Chr(9)+"mass [n_voxels]"+Chr(9)+"hydrodyn. radius [m]"+Chr(9)+"radius of gyration [m]"+Chr(9)+"fractal dimension [-]"+Chr(9)+"Péclet [-]"+Chr(9)+"fraction free spheres"+Chr(9)+"fraction free rods"+Chr(9)+"fraction free plates"+Chr(9)+"n_attachments"+Chr(9)+"monomono"+Chr(9)+"monopoly"+Chr(9)+"polypoly"+Chr(9)+"mean_z_spheres"+Chr(9)+"sd_z_spheres"+Chr(9)+"mean_z_rods"+Chr(9)+"sd_z_rods"+Chr(9)+"mean_z_plates"+Chr(9)+"sd_z_plates"+Chr(9)+"corr_sphere_rod"+Chr(9)+"corr_sphere_plate"+Chr(9)+"corr_rod_plate"+Chr(9)+"bonds_sphere_sphere"+Chr(9)+"bonds_sphere_rod"+Chr(9)+"bonds_sphere_plate"+Chr(9)+"bonds_rod_rod"+Chr(9)+"bonds_rod_plate"+Chr(9)+"bonds_plate_plate")
+For i=0 To n_timeseries
+  sum.i=timeseries(i)\attach_type(0)+timeseries(i)\attach_type(1)+timeseries(i)\attach_type(2)
+  WriteStringN(0,StrD(timeseries(i)\time)+Chr(9)+Str(timeseries(i)\nr_clus)+Chr(9)+StrD(timeseries(i)\mass)+Chr(9)+StrD(timeseries(i)\hydrodyn)+Chr(9)+StrD(timeseries(i)\gyration)+Chr(9)+StrD(timeseries(i)\fractal)+Chr(9)+StrD(timeseries(i)\peclet)+Chr(9)+StrD(timeseries(i)\freeparts(0))+Chr(9)+StrD(timeseries(i)\freeparts(1))+Chr(9)+StrD(timeseries(i)\freeparts(2))+Chr(9)+Str(sum)+Chr(9)+Str(timeseries(i)\attach_type(0))+Chr(9)+Str(timeseries(i)\attach_type(1))+Chr(9)+Str(timeseries(i)\attach_type(2))+Chr(9)+StrD(timeseries(i)\meanz_spheres)+Chr(9)+StrD(timeseries(i)\sdz_spheres)+Chr(9)+StrD(timeseries(i)\meanz_rods)+Chr(9)+StrD(timeseries(i)\sdz_rods)+Chr(9)+StrD(timeseries(i)\meanz_plates)+Chr(9)+StrD(timeseries(i)\sdz_plates)+Chr(9)+StrD(timeseries(i)\corr_sphererod)+Chr(9)+StrD(timeseries(i)\corr_sphereplate)+Chr(9)+StrD(timeseries(i)\corr_rodplate)+Chr(9)+Str(timeseries(i)\attach_minerals(0))+Chr(9)+Str(timeseries(i)\attach_minerals(1))+Chr(9)+Str(timeseries(i)\attach_minerals(2))+Chr(9)+Str(timeseries(i)\attach_minerals(3))+Chr(9)+Str(timeseries(i)\attach_minerals(4))+Chr(9)+Str(timeseries(i)\attach_minerals(5)))
+Next i  
+CloseFile(0)
 EndIf
 
-If MessageRequester("Info","Display 3D?",#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
-  
+ If MessageRequester("Info","Display 3D?",#PB_MessageRequester_YesNo)=#PB_MessageRequester_Yes
+
   aggregate_3d(2)
-  
-  
+
+
 EndIf
 
 
