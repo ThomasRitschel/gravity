@@ -4,6 +4,11 @@
 IncludeFile "linear_algebra.txt"
 IncludeFile "Screen3DRequester.txt"  
 
+
+IncludeFile "matrix.pb"
+IncludeFile #PB_Compiler_Home + "examples/3d/Screen3DRequester.pb"
+UsePNGImageEncoder()
+
 Structure coordinates
   x.i
   y.i
@@ -2526,8 +2531,8 @@ EndProcedure
 Procedure.d v_born(hamaker.d,distance.d,r1.d)
   
   temp.d
-  
-temp=hamaker/7560*Pow(sigma,6)*((8*r1+distance)/Pow(2*r1+distance,7)+(6*r1-distance)/Pow(distance,7))
+ temp=0 
+;temp=hamaker/7560*Pow(sigma,6)*((8*r1+distance)/Pow(2*r1+distance,7)+(6*r1-distance)/Pow(distance,7))
 ;temp=hamaker*Pow(sigma,6)/(360*#PI*Pow(distance,8))*r1*r1
 ;Debug temp
   ; temp=distance/(2*r1)+1
@@ -2571,7 +2576,7 @@ Procedure.d vt_ss(r1.d,r2.d,distance.d,conc.d,psi1.d,psi2.d,ham.d)
 ;  Debug va_ss(r1,r2,ham,distance)
 ;   Debug ve_ss(r1,r2,psi1,psi2,conc,distance)
 ;   Debug "---"
-  temp.d=ve_ss(r1,r2,psi1,psi2,conc,distance)+va_ss(r1,r2,ham,distance)+v_born(ham,distance,0.5*(r1+r2))
+  temp.d=ve_ss(r1,r2,psi1,psi2,conc,distance)+va_ss(r1,r2,ham,distance);+v_born(ham,distance,0.5*(r1+r2))
  ; Debug temp
   ProcedureReturn temp
   
@@ -2605,7 +2610,7 @@ Procedure.d vt_pp(area.d,thick.d,distance.d,conc.d,psi1.d,psi2.d,ham.d)
   ;    Debug va(r1,r2,ham,distance)
   ;   Debug distance*Pow(10,9)
   ;  calldebugger
-  temp.d=ve_pp(distance,conc,area,psi1,psi2)+va_pp(area,thick,ham,distance)+v_born(ham,distance,thick/2)
+  temp.d=ve_pp(distance,conc,area,psi1,psi2)+va_pp(area,thick,ham,distance);+v_born(ham,distance,thick/2)
   ProcedureReturn temp
 EndProcedure  
 
@@ -2631,7 +2636,7 @@ EndProcedure
 
 Procedure.d vt_sp(r1.d,distance.d,conc.d,psi1.d,psi2.d,ham.d)
   
-  temp.d=ve_sp(r1,psi1,psi2,conc,distance)+va_sp(r1,distance,ham)+v_born(ham,distance,r1)
+  temp.d=ve_sp(r1,psi1,psi2,conc,distance)+va_sp(r1,distance,ham);+v_born(ham,distance,r1)
   ProcedureReturn temp
   
 EndProcedure  
@@ -2666,7 +2671,7 @@ EndProcedure
 
 Procedure.d vt_rr(length.d,ham.d,distance.d,r1.d,r2.d,psi1.d,psi2.d,conc.d)
   
-  temp.d=va_rr(length,ham,distance,r1,r2)+ve_rr(length,r1,r2,psi1,psi2,distance,conc)+v_born(ham,distance,0.5*(r1+r2))
+  temp.d=va_rr(length,ham,distance,r1,r2)+ve_rr(length,r1,r2,psi1,psi2,distance,conc);+v_born(ham,distance,0.5*(r1+r2))
   ProcedureReturn temp
   
 EndProcedure  
@@ -2693,7 +2698,7 @@ EndProcedure
 
 Procedure.d vt_rp(length.d,ham.d,distance.d,r1.d,psi1.d,psi2.d,conc.d)
 
-  temp.d=va_rp(length,ham,distance,r1)+ve_rp(length,r1,psi1,psi2,distance,conc)+v_born(ham,distance,r1)
+  temp.d=va_rp(length,ham,distance,r1)+ve_rp(length,r1,psi1,psi2,distance,conc);+v_born(ham,distance,r1)
   ProcedureReturn temp
   
 EndProcedure  
@@ -3451,10 +3456,10 @@ Procedure open_parameters_window()
   ionic_strength=ReadPreferenceDouble("DLA_ionic_strength",0.001)
   dx=ReadPreferenceDouble("DLA_dx",0.0000001)  
   sediment=ReadPreferenceInteger("DLA_sediment",0)
-  allow_detach=ReadPreferenceInteger("DLA_detach",0)
+ ; allow_detach=ReadPreferenceInteger("DLA_detach",0)
   allow_attach=ReadPreferenceInteger("DLA_attach",0)
   allow_rotate=ReadPreferenceInteger("DLA_rotate",0)
-  sigma=ReadPreferenceDouble("DLA_sigma",5E-10)
+ ; sigma=ReadPreferenceDouble("DLA_sigma",5E-10)
   termination_crit=ReadPreferenceDouble("DLA_crit",0)
   termination_type=ReadPreferenceInteger("DLA_crit_type",1)
   camx=ReadPreferenceDouble("DLA_camx",-435.44)
@@ -3497,8 +3502,8 @@ Procedure open_parameters_window()
   SetGadgetState(#Checkbox_rotate,allow_rotate)    
   CheckBoxGadget(#Checkbox_attach,430,30,110,20,"allow attachment")
   SetGadgetState(#Checkbox_attach,allow_attach)  
-  CheckBoxGadget(#Checkbox_detach,430,50,110,20,"allow detachment")
-  SetGadgetState(#Checkbox_detach,allow_detach)
+  ;CheckBoxGadget(#Checkbox_detach,430,50,110,20,"allow detachment")
+  ;SetGadgetState(#Checkbox_detach,allow_detach)
   CheckBoxGadget(#Checkbox_sediment,430,70,110,20,"allow sedimentation")
   SetGadgetState(#Checkbox_sediment,sediment)
   
@@ -3559,8 +3564,8 @@ Procedure open_parameters_window()
   StringGadget(#String_ionic_strength,130,400,80,20,StrD(ionic_strength*1000))
   TextGadget(#Text_Temperature,30,420,100,20,"Temperature [K]")
   StringGadget(#String_Temperature,130,420,80,20,StrD(temperature))
-  TextGadget(#Text_sigma,30,440,100,20,"coll. diameter [nm]")
-  StringGadget(#String_sigma,130,440,80,20,StrD(sigma*Pow(10,9)))
+  ;TextGadget(#Text_sigma,30,440,100,20,"coll. diameter [nm]")
+  ;StringGadget(#String_sigma,130,440,80,20,StrD(sigma*Pow(10,9)))
   
   OptionGadget(#Radio_uncontrained,340,280,100,20,"unconstrained")
   OptionGadget(#Radio_mass,340,300,100,20,"mass")
@@ -3605,10 +3610,10 @@ Procedure open_parameters_window()
   ionic_strength=ValD(GetGadgetText(#String_ionic_strength))/1000
   temperature=ValD(GetGadgetText(#String_Temperature))
   sediment=GetGadgetState(#Checkbox_sediment)
-  allow_detach=GetGadgetState(#Checkbox_detach)
+  ;allow_detach=GetGadgetState(#Checkbox_detach)
   allow_attach=GetGadgetState(#Checkbox_attach)
   allow_rotate=GetGadgetState(#Checkbox_rotate)
-  sigma=ValD(GetGadgetText(#String_sigma))*Pow(10,-9)
+  ;sigma=ValD(GetGadgetText(#String_sigma))*Pow(10,-9)
   termination_type=1*GetGadgetState(#Radio_uncontrained)+2*GetGadgetState(#Radio_mass)+3*GetGadgetState(#Radio_gyration)+4*GetGadgetState(#Radio_time)+5*GetGadgetState(#Radio_nr)
   termination_crit=ValD(GetGadgetText(#String_crit))
   
@@ -3643,10 +3648,10 @@ Procedure open_parameters_window()
   WritePreferenceDouble("DLA_temperature",temperature)
   WritePreferenceDouble("DLA_ionic_strength",ionic_strength)
   WritePreferenceInteger("DLA_sediment",sediment)
-  WritePreferenceInteger("DLA_detach",allow_detach)
+ ; WritePreferenceInteger("DLA_detach",allow_detach)
   WritePreferenceInteger("DLA_attach",allow_attach)
   WritePreferenceInteger("DLA_rotate",allow_rotate)
-  WritePreferenceDouble("DLA_sigma",sigma)
+  ;WritePreferenceDouble("DLA_sigma",sigma)
   WritePreferenceDouble("DLA_crit",termination_crit)
   WritePreferenceInteger("DLA_crit_type",termination_type)
   
