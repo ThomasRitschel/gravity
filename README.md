@@ -3,9 +3,9 @@
 
 Numerical Model to Simulate Gravity-Driven Soil Aggregation and Colloidal Self-Assembly
 
-Instructions to gravity_aggregation_3D.exe
+Instructions to aggregation_modeler_3D.exe
 ------------------------------------------
-supporting executable to manuscript "Mechanistic modeling and 3D exploration of gravity-constrained aggregation in natural aqueous systems" by Tom Guhra, Thomas Ritschel and Kai Uwe Totsche
+supporting executable to manuscript "The mechanisms of gravity-constrained aggregation in natural colloidal suspensions" by Tom Guhra, Thomas Ritschel and Kai Uwe Totsche
 
 
 General Information
@@ -14,7 +14,7 @@ General Information
 
 Compiled from source.txt, linear_algebra.txt, and Screen3DRequester.txt with PureBasic 5.60
 
-if not already exisiting, gravity_aggregation_3D.exe creates init.dat upon first run to store user settings
+if not already exisiting, aggregation_modeler_3D.exe creates init.dat upon first run to store user settings
 
 
 Dependencies
@@ -26,7 +26,7 @@ The executable depends on the OGRE Engine (https://www.ogre3d.org/) that is lice
 
 https://github.com/OGRECave/ogre/blob/master/LICENSE
 
-To include the OGRE Engine, simply copy Engine3D.dll in the same folder as gravity_aggregation_3D.exe 
+To include the OGRE Engine, simply copy Engine3D.dll in the same folder as aggregation_modeler_3D.exe 
 
 
 System requirements
@@ -41,13 +41,13 @@ Win 10 64 Bit, 32/20/16 GB RAM
 
 Installation
 ------------
-execute gravity_aggregation_3D.exe as is, no installation required, include Engine3D.dll to the folder and install DirectX End-User Runtime if needed.
+execute aggregation_modeler_3D.exe as is, no installation required, include Engine3D.dll to the folder and install DirectX End-User Runtime if needed.
 
 Installation time is below 5 minutes typically.
 
 Demo
 ----
-1. execute gravity_aggregation_3D.exe
+1. execute aggregation_modeler_3D.exe
 2. test parameters are stored in init.dat and will be automatically imported if placed in the same folder
 3. click "Start"
 4. aggregation modeling starts and a window visualising the progress is created, controls are shown on screen
