@@ -16,6 +16,7 @@ Compiled from source.txt, linear_algebra.txt, and Screen3DRequester.txt with Pur
 
 if not already exisiting, aggregation_modeler_3D.exe creates init.dat upon first run to store user settings
 
+GAEA.exe was used to aggregate the (sometimes massive) simulation output
 
 Dependencies
 ------------
