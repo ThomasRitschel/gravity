@@ -5,8 +5,8 @@ IncludeFile "linear_algebra.txt"
 IncludeFile "Screen3DRequester.txt"  
 
 
-IncludeFile "matrix.pb"
-IncludeFile #PB_Compiler_Home + "examples/3d/Screen3DRequester.pb"
+;IncludeFile "matrix.pb"
+;IncludeFile #PB_Compiler_Home + "examples/3d/Screen3DRequester.pb"
 UsePNGImageEncoder()
 
 Structure coordinates
